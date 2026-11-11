@@ -1,0 +1,28 @@
+[package]
+name = "sn-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+base64.workspace = true
+chrono.workspace = true
+indexmap.workspace = true
+open.workspace = true
+parking_lot.workspace = true
+rand.workspace = true
+reqwest.workspace = true
+security-framework.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sn-core.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+url.workspace = true
+urlencoding.workspace = true
+
+[dev-dependencies]
+wiremock.workspace = true

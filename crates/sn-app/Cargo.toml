@@ -1,0 +1,29 @@
+[package]
+name = "sn-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "snrust"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+async-channel.workspace = true
+chrono.workspace = true
+gpui-kit.workspace = true
+indexmap.workspace = true
+open.workspace = true
+parking_lot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sn-api.workspace = true
+sn-cache.workspace = true
+sn-core.workspace = true
+sn-realtime.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+url.workspace = true
+uuid.workspace = true

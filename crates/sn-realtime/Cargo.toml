@@ -1,0 +1,28 @@
+[package]
+name = "sn-realtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-channel.workspace = true
+base64.workspace = true
+chrono.workspace = true
+futures-util.workspace = true
+indexmap.workspace = true
+parking_lot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sn-api.workspace = true
+sn-cache.workspace = true
+sn-core.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+wiremock.workspace = true

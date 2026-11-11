@@ -1,0 +1,76 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/sn-core",
+    "crates/sn-cache",
+    "crates/sn-api",
+    "crates/sn-realtime",
+    "crates/sn-app",
+]
+exclude = ["vendor/gpui-pre-macos"]
+
+[patch.crates-io]
+gpui-pre-macos = { path = "vendor/gpui-pre-macos" }
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+authors = ["snrust contributors"]
+
+[workspace.dependencies]
+sn-core = { path = "crates/sn-core" }
+sn-cache = { path = "crates/sn-cache" }
+sn-api = { path = "crates/sn-api" }
+sn-realtime = { path = "crates/sn-realtime" }
+
+# Async & Networking
+tokio = { version = "1.43", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "cookies", "gzip", "zstd", "rustls-tls", "http2"] }
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
+futures-util = "0.3"
+url = "2.5"
+urlencoding = "2.1"
+
+# Serialization & Data Structures
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+indexmap = { version = "2.7", features = ["serde"] }
+chrono = { version = "0.4.38", features = ["serde"] }
+uuid = { version = "1.11", features = ["v4", "serde"] }
+base64 = "0.22"
+sha2 = "0.10"
+rand = "0.8"
+
+# Storage, Caching & macOS Keychain
+rusqlite = { version = "0.32", features = ["bundled", "chrono", "serde_json"] }
+moka = { version = "0.12", features = ["sync"] }
+security-framework = "3.0"
+directories = "5.0"
+
+# Error Handling & Diagnostics
+thiserror = "2.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+parking_lot = "0.12"
+async-channel = "2.3"
+
+# GPUI Frontend
+gpui-kit = "0.9.1"
+open = "5.3"
+
+# Testing
+wiremock = "0.6"
+tempfile = "3.14"
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+opt-level = 3
