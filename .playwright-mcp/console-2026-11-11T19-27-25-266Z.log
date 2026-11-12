@@ -1,0 +1,44 @@
+[     225ms] [LOG] Going to iterate over instancesSettings @ https://assets.adobedtm.com/a441b904b50e/a1b7254b4e1d/launch-89f6ee0b3587.min.js:14
+[     918ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://ssosignon.servicenow.com/api/v1/sessions/me:1
+[     923ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://www.servicenow.com/docs/portal-asset/on-the-fly-pdf:1
+[     926ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://www.servicenow.com/docs/internal/api/webapp/designed/reader/topic/2ce4de90-4097-45ab-b4d1-4527755274b9?v=9ec16f94a7e7f270384ee66bcd917104:1
+[     930ms] an: Promise has been canceled
+    at https://www.servicenow.com/docs/scripts/converters-BrhOEMPm.cache.js:103:1132
+[     930ms] an: Promise has been canceled
+    at https://www.servicenow.com/docs/scripts/converters-BrhOEMPm.cache.js:103:1132
+[     931ms] Ha: GET https://www.servicenow.com/docs/internal/api/webapp/designed/reader/topic/2ce4de90-4097-45ab-b4d1-4527755274b9?v=9ec16f94a7e7f270384ee66bcd917104 -> 404 - : {"timestamp":"2026-11-11T19:27:23.686+00:00","status":404,"error":"Not Found","message":"404 NOT_FOUND","path":"/internal/api/webapp/designed/reader/topic/2ce4de90-4097-45ab-b4d1-4527755274b9","requestId":"b6jar6"}
+    at Ga (https://www.servicenow.com/docs/scripts/fluidtopics.min.js?v=6cd43af6:1:28000)
+[     949ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://www.servicenow.com/docs/api/messages/en-US/custom/server:1
+[     987ms] [ERROR] [NAAS shared nav custom component] TypeError: java.lang.NullPointerException
+    at R_g.U_g [as Rj] (fluidtopicsclient-0.js:7263:10220)
+    at R_g.Af [as Wj] (fluidtopicsclient-0.js:7258:6208)
+    at R_g.sf (fluidtopicsclient-0.js:3539:38)
+    at R_g.Df (fluidtopicsclient-0.js:1702:18)
+    at R_g.Ff (fluidtopicsclient-0.js:1703:18)
+    at new R_g (fluidtopicsclient-0.js:1718:19)
+    at ksh (fluidtopicsclient-0.js:4586:39)
+    at Vro (fluidtopicsclient-0.js:5549:50)
+    at Wro.cso [as fy] (fluidtopicsclient-0.js:7268:28377)
+    at Object.setUiLocale (fluidtopicsclient-0.js:6894:173) @ https://s2.go-mpulse.net/boomerang/RL5JW-PHDQ7-UYYZD-J2FGS-FE4LN:10
+[    1003ms] [ERROR] Custom component script error JSHandle@node TypeError: Cannot read properties of undefined (reading 'displayName')
+    at window.CustomComponentsScript.f9ecf597-903c-497c-b803-89abbfc7e867-8bb5b61d-8464-4631-97da-d99bbce5c27e (https://www.servicenow.com/docs/internal/api/webapp/designer/custom/SHARED/f9ecf597-903c-497c-b803-89abbfc7e867/8bb5b61d-8464-4631-97da-d99bbce5c27e/HEADER/js?draft=false&v=ce4cc09936c85fdcd2f8ee50e4ce44c7:11:62)
+    at H.runUserScript (https://www.servicenow.com/docs/scripts/FtHomepageCustomComponent-CwTANqKv.cache.js:6:3433)
+    at H.runScript (https://www.servicenow.com/docs/scripts/FtHomepageCustomComponent-CwTANqKv.cache.js:6:2015)
+    at H.updateScript (https://www.servicenow.com/docs/scripts/FtHomepageCustomComponent-CwTANqKv.cache.js:6:1889) @ https://s2.go-mpulse.net/boomerang/RL5JW-PHDQ7-UYYZD-J2FGS-FE4LN:10
+[    1003ms] [ERROR] Custom component script error JSHandle@node TypeError: Cannot read properties of undefined (reading 'displayName')
+    at window.CustomComponentsScript.f9ecf597-903c-497c-b803-89abbfc7e867-8bb5b61d-8464-4631-97da-d99bbce5c27e (https://www.servicenow.com/docs/internal/api/webapp/designer/custom/SHARED/f9ecf597-903c-497c-b803-89abbfc7e867/8bb5b61d-8464-4631-97da-d99bbce5c27e/HEADER/js?draft=false&v=ce4cc09936c85fdcd2f8ee50e4ce44c7:11:62)
+    at H.runUserScript (https://www.servicenow.com/docs/scripts/FtHomepageCustomComponent-CwTANqKv.cache.js:6:3433)
+    at H.runScript (https://www.servicenow.com/docs/scripts/FtHomepageCustomComponent-CwTANqKv.cache.js:6:2015)
+    at H.updateScript (https://www.servicenow.com/docs/scripts/FtHomepageCustomComponent-CwTANqKv.cache.js:6:1889) @ https://s2.go-mpulse.net/boomerang/RL5JW-PHDQ7-UYYZD-J2FGS-FE4LN:10
+[    1013ms] [ERROR] Ha: GET https://www.servicenow.com/docs/api/messages/en-US/custom/server -> 404 - : {"timestamp":"2026-11-11T19:27:23.124+00:00","status":404,"error":"Not Found","message":"Message context \"server\" does not exist.","path":"/api/messages/en-US/custom/server","requestId":"qfx9tb"}
+    at Ga (https://www.servicenow.com/docs/scripts/fluidtopics.min.js?v=6cd43af6:1:28000) @ https://s2.go-mpulse.net/boomerang/RL5JW-PHDQ7-UYYZD-J2FGS-FE4LN:10
+[    1077ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://www.servicenow.com/docs/internal/api/webapp/designer/custom/READER/default/e814ab50-e99b-4df0-940a-f12582013b75?draft=false&v=ce4cc09936c85fdcd2f8ee50e4ce44c7:1
+[    1129ms] [LOG] attributes[isAuthenticated]: false @ https://www.servicenow.com/docs/internal/api/webapp/designer/custom/SHARED/213ff6ec-84c7-48a3-9108-7d1241ea893a/4319dc78-c7d1-40cf-bbe3-0330ad55cdc6/HEADER/js?draft=false&v=ce4cc09936c85fdcd2f8ee50e4ce44c7:35
+[    1129ms] [LOG] attributes[roles]: [PRINT_USER, RATING_USER, FEEDBACK_USER, GENERATIVE_AI_USER, GENERATIVE_AI_EXPORT_USER] @ https://www.servicenow.com/docs/internal/api/webapp/designer/custom/SHARED/213ff6ec-84c7-48a3-9108-7d1241ea893a/4319dc78-c7d1-40cf-bbe3-0330ad55cdc6/HEADER/js?draft=false&v=ce4cc09936c85fdcd2f8ee50e4ce44c7:35
+[    1183ms] Ha: GET https://www.servicenow.com/docs/internal/api/webapp/designer/custom/READER/default/e814ab50-e99b-4df0-940a-f12582013b75?draft=false&v=ce4cc09936c85fdcd2f8ee50e4ce44c7 -> 404 - : {"timestamp":"2026-11-11T19:27:26.246+00:00","status":404,"error":"Not Found","message":"404 NOT_FOUND","path":"/internal/api/webapp/designer/custom/READER/default/e814ab50-e99b-4df0-940a-f12582013b75","requestId":"xliohf"}
+    at Ga (https://www.servicenow.com/docs/scripts/fluidtopics.min.js?v=6cd43af6:1:28000)
+[    4274ms] [WARNING] The resource https://www.servicenow.com/etc.clientlibs/ds/clientlibs/clientlib-arc-commons-lts/resources/fonts/ServiceNowSansMono-Regular.woff2 was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://www.servicenow.com/docs/fluidtopicsclient-hostframe.html:1
+[    4274ms] [WARNING] The resource https://www.servicenow.com/etc.clientlibs/ds/clientlibs/clientlib-arc-commons-lts/resources/fonts/ServiceNowSans-Thin.woff2 was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://www.servicenow.com/docs/fluidtopicsclient-hostframe.html:1
+[    4274ms] [WARNING] The resource https://www.servicenow.com/etc.clientlibs/ds/clientlibs/clientlib-arc-commons-lts/resources/fonts/fa-brands-400.woff2 was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://www.servicenow.com/docs/fluidtopicsclient-hostframe.html:1
+[    4274ms] [WARNING] The resource https://www.servicenow.com/etc.clientlibs/ds/clientlibs/clientlib-arc-commons-lts/resources/fonts/fa-solid-900.woff2 was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://www.servicenow.com/docs/fluidtopicsclient-hostframe.html:1
+[    4274ms] [WARNING] The resource https://www.servicenow.com/etc.clientlibs/ds/clientlibs/clientlib-arc-commons-lts/resources/fonts/ServiceNowSans-Regular.woff2 was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://www.servicenow.com/docs/fluidtopicsclient-hostframe.html:1

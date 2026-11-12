@@ -88,12 +88,17 @@ impl SnClient {
         hierarchy: &TableHierarchy,
     ) -> SnResult<TableSchema> {
         let chain = hierarchy.inheritance_chain(table);
-        let chain_csv = chain.join(",");
+        let chain_csv = chain
+            .iter()
+            .map(String::as_str)
+            .chain(std::iter::once("sys"))
+            .collect::<Vec<_>>()
+            .join(",");
 
         let (dict_res, choices_res, ui_cols_res) = tokio::join!(
             self.fetch_dictionary_by_chain(&chain_csv, hierarchy),
             self.fetch_choices_by_chain(&chain_csv),
-            self.fetch_default_ui_list_columns(&chain),
+            self.fetch_list_columns(&chain, ""),
         );
 
         let choices_by_table = match choices_res {
@@ -154,28 +159,23 @@ impl SnClient {
 
         let label = resolved_label.unwrap_or_else(|| humanize_identifier(table));
 
-        Ok(TableSchema::assemble(
+        let mut schema = TableSchema::assemble(
             table,
             label,
             chain,
             &entries_by_table,
             &choices_by_table,
             custom_default_cols,
-        ))
+        );
+        schema.ensure_system_fields();
+        Ok(schema)
     }
 
     async fn fetch_db_object_rows(&self) -> SnResult<Vec<IndexMap<String, FieldValue>>> {
-        self.get_raw_table_rows(
+        self.metadata_rows(
             "sys_db_object",
-            &[
-                ("sysparm_query", "nameISNOTEMPTY^ORDERBYname".to_string()),
-                (
-                    "sysparm_fields",
-                    "sys_id,name,label,super_class,is_extendable".to_string(),
-                ),
-                ("sysparm_limit", "10000".to_string()),
-                ("sysparm_no_count", "true".to_string()),
-            ],
+            "nameISNOTEMPTY^ORDERBYname",
+            "sys_id,name,label,super_class,is_extendable",
         )
         .await
     }
@@ -227,21 +227,8 @@ impl SnClient {
         HashMap<String, Vec<DictionaryEntry>>,
         HashMap<String, String>,
     )> {
-        let rows = self
-            .get_raw_table_rows(
-                "sys_dictionary",
-                &[
-                    ("sysparm_query", format!("nameIN{chain_csv}^active=true")),
-                    (
-                        "sysparm_fields",
-                        "name,element,column_label,internal_type,max_length,mandatory,read_only,active,display,default_value,reference,dependent"
-                            .to_string(),
-                    ),
-                    ("sysparm_limit", "5000".to_string()),
-                    ("sysparm_no_count", "true".to_string()),
-                ],
-            )
-            .await?;
+        let rows = self.metadata_rows("sys_dictionary", &format!("nameIN{chain_csv}^active=true^ORDERBYsys_id"),
+            "name,element,column_label,internal_type,max_length,mandatory,read_only,active,display,default_value,reference,dependent").await?;
 
         let id_to_table: HashMap<&str, &str> = hierarchy
             .all_tables()
@@ -339,17 +326,10 @@ impl SnClient {
         chain_csv: &str,
     ) -> SnResult<HashMap<String, HashMap<String, Vec<ChoiceOption>>>> {
         let rows = self
-            .get_raw_table_rows(
+            .metadata_rows(
                 "sys_choice",
-                &[
-                    ("sysparm_query", format!("nameIN{chain_csv}^inactive=false")),
-                    (
-                        "sysparm_fields",
-                        "name,element,value,label,sequence,dependent_value,inactive".to_string(),
-                    ),
-                    ("sysparm_limit", "5000".to_string()),
-                    ("sysparm_no_count", "true".to_string()),
-                ],
+                &format!("nameIN{chain_csv}^inactive=false^ORDERBYsys_id"),
+                "name,element,value,label,sequence,dependent_value,inactive",
             )
             .await?;
 
@@ -390,83 +370,6 @@ impl SnClient {
         }
 
         Ok(by_table)
-    }
-
-    async fn fetch_default_ui_list_columns(
-        &self,
-        chain: &[String],
-    ) -> SnResult<Option<Vec<String>>> {
-        let chain_csv = chain.join(",");
-        let list_rows = self
-            .get_raw_table_rows(
-                "sys_ui_list",
-                &[
-                    (
-                        "sysparm_query",
-                        format!("nameIN{chain_csv}^parentISEMPTY^userISEMPTY"),
-                    ),
-                    ("sysparm_fields", "sys_id,name,view".to_string()),
-                    ("sysparm_limit", "25".to_string()),
-                    ("sysparm_no_count", "true".to_string()),
-                ],
-            )
-            .await?;
-
-        // Prefer the most specific table in `chain` with the Default view.
-        let chosen_list_id = chain.iter().find_map(|tbl| {
-            list_rows.iter().find_map(|row| {
-                if raw_str(row, "name") != *tbl {
-                    return None;
-                }
-                let view_disp = display_or_raw(row, "view").unwrap_or_default();
-                let is_default_view =
-                    view_disp.is_empty() || view_disp.eq_ignore_ascii_case("Default view");
-                if is_default_view {
-                    let id = raw_str(row, "sys_id");
-                    (!id.is_empty()).then_some(id)
-                } else {
-                    None
-                }
-            })
-        });
-
-        let Some(list_sys_id) = chosen_list_id else {
-            return Ok(None);
-        };
-
-        let elem_rows = self
-            .get_raw_table_rows(
-                "sys_ui_list_element",
-                &[
-                    (
-                        "sysparm_query",
-                        format!("list_id={list_sys_id}^ORDERBYposition"),
-                    ),
-                    ("sysparm_fields", "element,position".to_string()),
-                    ("sysparm_limit", "100".to_string()),
-                    ("sysparm_no_count", "true".to_string()),
-                ],
-            )
-            .await?;
-
-        let mut positioned: Vec<(i32, String)> = elem_rows
-            .into_iter()
-            .filter_map(|row| {
-                let elem = raw_str(&row, "element");
-                if elem.is_empty() || elem.starts_with('.') {
-                    return None;
-                }
-                let pos = row
-                    .get("position")
-                    .and_then(|f| f.value.trim().parse::<i32>().ok())
-                    .unwrap_or(0);
-                Some((pos, elem))
-            })
-            .collect();
-
-        positioned.sort_by_key(|(pos, _)| *pos);
-        let cols: Vec<String> = positioned.into_iter().map(|(_, elem)| elem).collect();
-        Ok((!cols.is_empty()).then_some(cols))
     }
 
     async fn synthesize_entries_from_sample(&self, table: &str) -> SnResult<Vec<DictionaryEntry>> {
@@ -600,13 +503,13 @@ fn infer_synthetic_type(element: &str, fv: &FieldValue) -> (String, FieldType, O
     ("string".to_string(), FieldType::String, Some(80))
 }
 
-fn raw_str(row: &IndexMap<String, FieldValue>, key: &str) -> String {
+pub(crate) fn raw_str(row: &IndexMap<String, FieldValue>, key: &str) -> String {
     row.get(key)
         .map(|f| f.value.trim().to_string())
         .unwrap_or_default()
 }
 
-fn display_or_raw(row: &IndexMap<String, FieldValue>, key: &str) -> Option<String> {
+pub(crate) fn display_or_raw(row: &IndexMap<String, FieldValue>, key: &str) -> Option<String> {
     row.get(key)
         .map(|f| f.effective_display().trim().to_string())
         .filter(|s| !s.is_empty())

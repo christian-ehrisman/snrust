@@ -53,7 +53,15 @@ impl From<String> for InstanceId {
     }
 }
 
-/// Non-secret metadata for a ServiceNow instance connection.
+/// The authenticated principal, resolved by ServiceNow rather than entered by the user.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AccountIdentity {
+    pub sys_id: String,
+    pub user_name: String,
+    pub display_name: String,
+}
+
+/// Non-secret metadata for an account connection. Multiple profiles may share an origin.
 ///
 /// Secrets (`access_token`, `refresh_token`, and optional `client_secret`) are stored
 /// exclusively in macOS Keychain keyed by [`InstanceProfile::id`].
@@ -71,6 +79,8 @@ pub struct InstanceProfile {
     pub accent_hex: String,
     pub created_at: DateTime<Utc>,
     pub last_connected_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub account: Option<AccountIdentity>,
 }
 
 impl InstanceProfile {
@@ -99,6 +109,7 @@ impl InstanceProfile {
             accent_hex: "#38BDF8".to_string(),
             created_at: Utc::now(),
             last_connected_at: None,
+            account: None,
         })
     }
 
@@ -152,6 +163,19 @@ impl InstanceProfile {
 
     pub fn redirect_uri(&self) -> String {
         format!("http://127.0.0.1:{}/oauth/callback", self.callback_port)
+    }
+
+    pub fn display_label(&self) -> String {
+        match &self.account {
+            Some(account) => format!("{} · {}", self.name, account.user_name),
+            None => self.name.clone(),
+        }
+    }
+
+    /// Unknown legacy identities must be reconnected into a fresh cache namespace.
+    pub fn is_same_account(&self, other: &Self) -> bool {
+        self.base_url == other.base_url
+            && matches!((&self.account, &other.account), (Some(a), Some(b)) if a.sys_id == b.sys_id)
     }
 
     pub fn authorize_endpoint(&self) -> String {

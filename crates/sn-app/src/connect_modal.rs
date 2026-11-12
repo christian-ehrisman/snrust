@@ -13,7 +13,9 @@ use gpui_kit::component::{
 };
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
-use sn_api::{CredentialStore, OAuthPkceFlow};
+
+use crate::theme::sp;
+use sn_api::{CredentialStore, OAuthPkceFlow, SnClient, oauth_access_hint};
 use sn_core::instance::DEFAULT_OAUTH_CALLBACK_PORT;
 use sn_core::{InstanceId, InstanceProfile};
 use tokio::sync::watch;
@@ -177,18 +179,38 @@ impl ConnectModalView {
                 }
             };
 
-        if let Some(existing_id) = &self.editing_id {
-            profile.id = existing_id.clone();
-        }
+        let previous = self
+            .instances
+            .iter()
+            .find(|p| Some(&p.id) == self.editing_id.as_ref())
+            .cloned();
         profile.callback_port = callback_port;
         profile.accent_hex = self.selected_accent.clone();
 
-        let client_secret_opt = (!client_secret_raw.is_empty()).then_some(client_secret_raw);
-        if let Some(sec) = &client_secret_opt {
-            let _ = self
+        let mut client_secret_opt = (!client_secret_raw.is_empty()).then_some(client_secret_raw);
+        if client_secret_opt.is_none()
+            && let Some(old) = &previous
+            && old.has_client_secret
+        {
+            match self.services.cred_store.get_client_secret(&old.id) {
+                Ok(secret) => client_secret_opt = secret,
+                Err(err) => {
+                    self.status_error = Some(err.to_string());
+                    cx.notify();
+                    return;
+                }
+            }
+        }
+        profile.has_client_secret = client_secret_opt.is_some();
+        if let Some(sec) = &client_secret_opt
+            && let Err(err) = self
                 .services
                 .cred_store
-                .save_client_secret(&profile.id, sec);
+                .save_client_secret(&profile.id, sec)
+        {
+            self.status_error = Some(err.to_string());
+            cx.notify();
+            return;
         }
 
         let (cancel_tx, cancel_rx) = watch::channel(false);
@@ -203,34 +225,70 @@ impl ConnectModalView {
         let (phase_tx, phase_rx) = async_channel::bounded::<Result<String, String>>(2);
         let (done_tx, done_rx) = async_channel::bounded::<Result<InstanceProfile, String>>(1);
 
+        let existing_profiles = self.instances.clone();
         let prof_bg = profile.clone();
         tokio_handle.spawn(async move {
-            match OAuthPkceFlow::start_pkce_listener(
-                &prof_bg,
-                client_secret_opt,
-                cred_store,
-                true,
-                Some(cancel_rx),
-            )
-            .await
+            // Authenticate into an isolated staging profile. Browser SSO may select a different
+            // user; it must never overwrite that account's credentials or reuse its cached data.
+            let result = async {
+                let pending = OAuthPkceFlow::start_pkce_listener(
+                    &prof_bg,
+                    client_secret_opt,
+                    cred_store.clone(),
+                    true,
+                    Some(cancel_rx),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+                let _ = phase_tx.send(Ok(pending.authorize_url.clone())).await;
+                pending
+                    .wait_for_callback(Duration::from_secs(240))
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let mut connected = prof_bg.clone();
+                connected.account = Some(verify_new_token(&connected, &cred_store).await?);
+                connected.last_connected_at = Some(Utc::now());
+                if let Some(old) = existing_profiles.iter().find(|old| {
+                    old.is_same_account(&connected) && old.client_id == connected.client_id
+                }) {
+                    let credentials = cred_store
+                        .get_credentials(&prof_bg.id)
+                        .map_err(|e| e.to_string())?
+                        .ok_or_else(|| {
+                            "The new account's credentials were not saved to Keychain.".to_string()
+                        })?;
+                    cred_store
+                        .save_credentials(&old.id, &credentials)
+                        .map_err(|e| e.to_string())?;
+                    if let Some(secret) = cred_store
+                        .get_client_secret(&prof_bg.id)
+                        .map_err(|e| e.to_string())?
+                    {
+                        cred_store
+                            .save_client_secret(&old.id, &secret)
+                            .map_err(|e| e.to_string())?;
+                    }
+                    connected.id = old.id.clone();
+                    connected.created_at = old.created_at;
+                }
+                Ok::<_, String>(connected)
+            }
+            .await;
+            if !result
+                .as_ref()
+                .is_ok_and(|connected| connected.id == prof_bg.id)
             {
-                Ok(pending) => {
-                    let _ = phase_tx.send(Ok(pending.authorize_url.clone())).await;
-                    match pending.wait_for_callback(Duration::from_secs(240)).await {
-                        Ok(_creds) => {
-                            let mut connected = prof_bg;
-                            connected.last_connected_at = Some(Utc::now());
-                            let _ = done_tx.send(Ok(connected)).await;
-                        }
-                        Err(e) => {
-                            let _ = done_tx.send(Err(e.to_string())).await;
-                        }
+                for cleanup in [
+                    cred_store.delete_credentials(&prof_bg.id),
+                    cred_store.delete_client_secret(&prof_bg.id),
+                ] {
+                    if let Err(err) = cleanup {
+                        tracing::warn!(%err, "Failed cleaning temporary OAuth credentials");
                     }
                 }
-                Err(e) => {
-                    let _ = phase_tx.send(Err(e.to_string())).await;
-                }
             }
+            drop(phase_tx);
+            let _ = done_tx.send(result).await;
         });
 
         cx.spawn_in(window, async move |this, cx| {
@@ -263,7 +321,13 @@ impl ConnectModalView {
 
                     match outcome {
                         Ok(connected_profile) => {
-                            let _ = view.services.cache.upsert_instance(&connected_profile);
+                            if let Err(err) =
+                                view.services.cache.upsert_instance(&connected_profile)
+                            {
+                                view.status_error = Some(err.to_string());
+                                cx.notify();
+                                return;
+                            }
                             let _ = view
                                 .services
                                 .cache
@@ -347,13 +411,13 @@ impl Render for ConnectModalView {
 
         h_flex()
             .w_full()
-            .min_h(px(460.0))
+            .min_h(sp(460.0))
             .gap_5()
             .items_start()
             // Left column: Saved Instances + Instant Demo Sandbox
             .child(
                 v_flex()
-                    .w(px(270.0))
+                    .w(sp(270.0))
                     .flex_shrink_0()
                     .gap_3()
                     .p_3()
@@ -442,6 +506,7 @@ impl Render for ConnectModalView {
                                         parse_hex_color(&inst.accent_hex).unwrap_or(theme.primary);
                                     let inst_switch = inst.clone();
                                     let inst_edit = inst.clone();
+                                    let inst_add = inst.clone();
                                     let inst_del_id = inst.id.clone();
 
                                     v_flex()
@@ -481,7 +546,7 @@ impl Render for ConnectModalView {
                                                                 .text_xs()
                                                                 .font_semibold()
                                                                 .truncate()
-                                                                .child(inst.name.clone()),
+                                                                .child(inst.display_label()),
                                                         ),
                                                 )
                                                 .when(is_active, |el| {
@@ -491,7 +556,7 @@ impl Render for ConnectModalView {
                                                             .py_0p5()
                                                             .rounded(px(4.0))
                                                             .bg(theme.primary.opacity(0.18))
-                                                            .text_size(px(10.0))
+                                                            .text_size(sp(10.0))
                                                             .text_color(theme.primary)
                                                             .child("Active"),
                                                     )
@@ -499,7 +564,7 @@ impl Render for ConnectModalView {
                                         )
                                         .child(
                                             div()
-                                                .text_size(px(11.0))
+                                                .text_size(sp(11.0))
                                                 .text_color(theme.muted_foreground)
                                                 .truncate()
                                                 .child(inst.base_url.clone()),
@@ -548,20 +613,26 @@ impl Render for ConnectModalView {
                                                         )),
                                                 )
                                                 .child(
+                                                    Button::new(("add-account", ix))
+                                                        .ghost().xsmall().label("Add user")
+                                                        .disabled(self.is_busy)
+                                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                                            this.populate_form_from(&inst_add, window, cx);
+                                                            this.editing_id = None;
+                                                            cx.notify();
+                                                        })),
+                                                )
+                                                .child(
                                                     Button::new(("del-inst", ix))
                                                         .ghost()
                                                         .xsmall()
                                                         .icon(IconName::Trash)
                                                         .on_click(cx.listener(
                                                             move |this, _, _, cx| {
-                                                                let _ = this
-                                                                    .services
-                                                                    .cache
-                                                                    .delete_instance(&inst_del_id);
-                                                                let _ = this
-                                                                    .services
-                                                                    .cred_store
-                                                                    .delete_credentials(&inst_del_id);
+                                                                let result = this.services.cred_store.delete_credentials(&inst_del_id)
+                                                                    .and_then(|_| this.services.cred_store.delete_client_secret(&inst_del_id))
+                                                                    .and_then(|_| this.services.cache.delete_instance(&inst_del_id));
+                                                                if let Err(err) = result { this.status_error = Some(err.to_string()); cx.notify(); return; }
                                                                 this.services
                                                                     .evict_client(&inst_del_id);
                                                                 this.instances = this
@@ -607,7 +678,7 @@ impl Render for ConnectModalView {
                                 div()
                                     .text_xs()
                                     .text_color(theme.muted_foreground)
-                                    .child("Authenticates in your system browser (SSO/MFA supported) and stores tokens in macOS Keychain."),
+                                    .child("Each user has isolated tokens and cache. To add another user, sign out in your browser first or open the authorization URL in a private browser window. The signed-in username is verified automatically."),
                             ),
                     )
                     .child(field_block(
@@ -632,7 +703,7 @@ impl Render for ConnectModalView {
                                 )),
                             )
                             .child(
-                                div().w(px(110.0)).child(field_block(
+                                div().w(sp(110.0)).child(field_block(
                                     "Callback Port",
                                     Input::new(&self.port_input).small(),
                                     &theme,
@@ -834,4 +905,19 @@ fn field_block(
                 .child(label),
         )
         .child(control)
+}
+
+/// Identity is required before selecting a persistent credential/cache namespace.
+async fn verify_new_token(
+    profile: &InstanceProfile,
+    cred_store: &Arc<dyn CredentialStore>,
+) -> Result<sn_core::AccountIdentity, String> {
+    let client = SnClient::new(profile.clone(), cred_store.clone()).map_err(|e| e.to_string())?;
+    client
+        .current_account()
+        .await
+        .map_err(|err| match oauth_access_hint(&err) {
+            Some(hint) => format!("Signed in, but {err}\n\n{hint}"),
+            None => format!("Cannot verify signed-in account: {err}"),
+        })
 }

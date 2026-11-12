@@ -14,11 +14,16 @@ use tokio::runtime::Handle;
 use tracing::warn;
 
 use crate::demo_server::DemoSandboxServer;
+use crate::reference_preview::PreviewLoads;
 
 /// High-level navigation & UI commands dispatched from child panels (`ListViewPanel`,
 /// `FormViewPanel`, `CommandPalette`, `ConnectModal`) up to the `WorkspaceShell`.
 #[derive(Debug, Clone)]
 pub enum WorkspaceCommand {
+    OpenTarget {
+        target: sn_core::ClassicTarget,
+        in_split: bool,
+    },
     OpenList {
         table: String,
         label: Option<String>,
@@ -47,6 +52,7 @@ pub enum WorkspaceCommand {
     },
     ShowInstanceModal,
     RecordSaved {
+        instance_id: InstanceId,
         record: SnRecord,
         close_after: bool,
     },
@@ -54,6 +60,8 @@ pub enum WorkspaceCommand {
     ToastSuccess(String),
     ToastError(String),
     RefreshSidebar,
+    /// Refetch applications and favorites from ServiceNow.
+    SyncNavigation,
 }
 
 /// Composite credential vault that delegates real OAuth instances to macOS Keychain while keeping
@@ -139,6 +147,7 @@ pub struct AppServices {
     pub cred_store: Arc<HybridCredentialStore>,
     pub realtime: RealtimeCoordinator,
     pub cmd_tx: async_channel::Sender<WorkspaceCommand>,
+    pub preview_loads: PreviewLoads,
     clients: Arc<RwLock<HashMap<InstanceId, SnClient>>>,
     demo_server: Arc<RwLock<Option<DemoSandboxServer>>>,
 }
@@ -162,6 +171,7 @@ impl AppServices {
             cred_store,
             realtime,
             cmd_tx,
+            preview_loads: PreviewLoads::default(),
             clients: Arc::new(RwLock::new(HashMap::new())),
             demo_server: Arc::new(RwLock::new(None)),
         };
@@ -216,7 +226,9 @@ impl AppServices {
                         .await;
                 });
             }
-            return Ok(cached.data);
+            let mut schema = cached.data;
+            schema.ensure_system_fields();
+            return Ok(schema);
         }
 
         self.refresh_table_schema_network(client, table).await
@@ -228,7 +240,18 @@ impl AppServices {
         table: &str,
     ) -> SnResult<TableSchema> {
         let instance_id = client.profile().id.clone();
-        let hierarchy = self.ensure_table_hierarchy(client).await;
+        let mut hierarchy = self.ensure_table_hierarchy(client).await;
+        if hierarchy.get(table).is_none() {
+            match client.fetch_table_catalog().await {
+                Ok(catalog) => {
+                    self.cache.save_table_catalog(&instance_id, &catalog)?;
+                    hierarchy = TableHierarchy::from_descriptors(catalog);
+                }
+                Err(err) => {
+                    tracing::warn!(%err, table, "Could not resolve table ancestry; using known fallback")
+                }
+            }
+        }
         let schema = client.fetch_table_schema(table, &hierarchy).await?;
         if let Err(err) = self
             .cache
@@ -247,6 +270,7 @@ impl AppServices {
         {
             return existing;
         }
+
         match client.fetch_table_catalog().await {
             Ok(catalog) => {
                 let _ = self
@@ -260,6 +284,29 @@ impl AppServices {
             Err(err) => {
                 warn!("Catalog fetch fallback: {err}");
                 TableHierarchy::from_descriptors(Vec::new())
+            }
+        }
+    }
+
+    /// Keep the last server layout when metadata ACLs/network prevent revalidation.
+    pub async fn sync_form_views(&self, client: &SnClient, schema: &TableSchema) {
+        match client.fetch_form_views(&schema.hierarchy).await {
+            Ok(views) => {
+                if let Err(err) = self.cache.save_account_metadata(
+                    &client.profile().id,
+                    &format!("forms:{}", schema.table),
+                    &views,
+                ) {
+                    self.send_cmd(WorkspaceCommand::ToastError(format!(
+                        "Cannot cache form views: {err}"
+                    )));
+                }
+            }
+            Err(err) => {
+                tracing::warn!(%err, table = %schema.table, "Cannot sync classic form views");
+                self.send_cmd(WorkspaceCommand::ToastError(format!(
+                    "Cannot sync form views: {err}. Using cached views or the automatic grid."
+                )));
             }
         }
     }
@@ -285,6 +332,11 @@ impl AppServices {
             false,
         )?;
         profile.id = InstanceId::from("demo-sandbox-local");
+        profile.account = Some(sn_core::AccountIdentity {
+            sys_id: "demo".into(),
+            user_name: "demo".into(),
+            display_name: "Demo User".into(),
+        });
         profile.accent_hex = "#34D399".to_string();
         profile.last_connected_at = Some(chrono::Utc::now());
 
@@ -302,6 +354,14 @@ impl AppServices {
         self.cache.set_active_instance_id(Some(&profile.id))?;
         self.clients.write().remove(&profile.id);
         Ok(profile)
+    }
+
+    /// Makes the running Demo Sandbox refuse favorite and saved-filter writes.
+    #[cfg(test)]
+    pub fn set_demo_rejects_ui_writes(&self, reject: bool) {
+        if let Some(server) = self.demo_server.read().as_ref() {
+            server.set_reject_ui_writes(reject);
+        }
     }
 
     pub fn is_demo_instance(&self, instance_id: &InstanceId) -> bool {

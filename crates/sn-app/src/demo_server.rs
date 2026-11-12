@@ -11,7 +11,9 @@ use chrono::Utc;
 use indexmap::IndexMap;
 use parking_lot::RwLock;
 use serde_json::{Value, json};
-use sn_core::{FieldValue, JournalEntry, SnRecord};
+use sn_core::{
+    Condition, EncodedQuery, FieldValue, FilterClause, FilterOperator, JournalEntry, SnRecord,
+};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::runtime::Handle;
@@ -25,6 +27,9 @@ pub struct DemoSandboxServer {
 
 struct DemoDataStore {
     tables: HashMap<String, IndexMap<String, SnRecord>>,
+    /// Makes writes to personal UI tables fail with 403, as on an instance whose ACLs do
+    /// not let the user create favorites or filters.
+    reject_ui_writes: bool,
     journals: Vec<JournalEntry>,
     next_number_seq: u64,
     next_journal_seq: u64,
@@ -48,6 +53,12 @@ impl DemoSandboxServer {
         });
 
         Ok(Self { base_url, state })
+    }
+
+    /// Simulates an instance that refuses writes to favorites and saved filters.
+    #[cfg(test)]
+    pub fn set_reject_ui_writes(&self, reject: bool) {
+        self.state.write().reject_ui_writes = reject;
     }
 
     pub fn base_url(&self) -> &str {
@@ -428,13 +439,118 @@ impl DemoDataStore {
             },
         ];
 
+        // Personal UI configuration lives in the generic store so favorites and saved
+        // filters can be created, edited and deleted like on a real instance.
+        let rows = |table: &str, records: &[&[(&str, &str)]]| -> IndexMap<String, SnRecord> {
+            records
+                .iter()
+                .map(|fields| {
+                    let map: IndexMap<String, FieldValue> = fields
+                        .iter()
+                        .map(|(key, value)| (key.to_string(), FieldValue::scalar(*value)))
+                        .collect();
+                    let record = SnRecord::from_field_map(table, map, false);
+                    (record.sys_id.clone(), record)
+                })
+                .collect()
+        };
+        tables.insert(
+            "sys_ui_bookmark_group".into(),
+            rows(
+                "sys_ui_bookmark_group",
+                &[&[
+                    ("sys_id", "demo_group_queues"),
+                    ("title", "Queues"),
+                    ("user", DEMO_USER_SYS_ID),
+                    ("order", "20"),
+                ]],
+            ),
+        );
+        tables.insert(
+            "sys_ui_bookmark".into(),
+            rows(
+                "sys_ui_bookmark",
+                &[
+                    &[
+                        ("sys_id", "demo_favorite"),
+                        ("title", "Critical incidents"),
+                        ("url", "incident_list.do?sysparm_query=priority%3D1"),
+                        ("user", DEMO_USER_SYS_ID),
+                        ("group", "demo_group_queues"),
+                        ("order", "1"),
+                    ],
+                    &[
+                        ("sys_id", "demo_fav_unassigned"),
+                        ("title", "Unassigned incidents"),
+                        ("url", "incident_list.do?sysparm_query=assigned_toISEMPTY"),
+                        ("user", DEMO_USER_SYS_ID),
+                        ("group", "demo_group_queues"),
+                        ("order", "2"),
+                    ],
+                    &[
+                        ("sys_id", "demo_new_favorite"),
+                        ("title", "Create incident (compact)"),
+                        ("url", "incident.do?sys_id=-1&sysparm_view=compact"),
+                        ("user", DEMO_USER_SYS_ID),
+                        ("group", ""),
+                        ("order", "10"),
+                    ],
+                    &[
+                        ("sys_id", "demo_workspace"),
+                        ("title", "Workspace (excluded)"),
+                        ("url", "/now/workspace/agent/home"),
+                        ("user", DEMO_USER_SYS_ID),
+                        ("group", ""),
+                        ("order", "30"),
+                    ],
+                ],
+            ),
+        );
+
+        tables.insert(
+            "sys_filter".into(),
+            rows(
+                "sys_filter",
+                &[
+                    &[
+                        ("sys_id", "demo_filter_mine"),
+                        ("title", "High priority"),
+                        ("table", "incident"),
+                        ("filter", "active=true^priority<=2"),
+                        ("user", DEMO_USER_SYS_ID),
+                        ("group", ""),
+                    ],
+                    &[
+                        ("sys_id", "demo_filter_global"),
+                        ("title", "Active"),
+                        ("table", "task"),
+                        ("filter", "active=true"),
+                        ("user", ""),
+                        ("group", ""),
+                    ],
+                ],
+            ),
+        );
+
         Self {
             tables,
+            reject_ui_writes: false,
             journals,
             next_number_seq: 10200,
             next_journal_seq: 10,
         }
     }
+}
+
+/// The demo account's `sys_user.sys_id`; `javascript:gs.getUserID()` resolves to it.
+const DEMO_USER_SYS_ID: &str = "demo";
+
+/// Tables whose rows are stored exactly as written, without incident-style defaults.
+fn is_plain_demo_table(table: &str) -> bool {
+    matches!(
+        table,
+        "sys_ui_bookmark" | "sys_ui_bookmark_group" | "sys_filter"
+    )
 }
 
 async fn handle_http_connection(
@@ -520,8 +636,89 @@ async fn handle_http_connection(
         return write_json_response(&mut stream, 200, &[], &result).await;
     }
 
-    if path == "/api/now/table/sys_ui_list" || path == "/api/now/table/sys_ui_list_element" {
-        return write_json_response(&mut stream, 200, &[], &json!({ "result": [] })).await;
+    let classic_metadata = match path {
+        "/api/now/table/sys_ui_list" => Some(json!([
+            {"sys_id":"demo_list","name":"incident","user":"demo","view":""}
+        ])),
+        "/api/now/table/sys_ui_list_element" => Some(json!([
+            {"element":"number","position":"0"},{"element":"short_description","position":"1"},
+            {"element":"priority","position":"2"},{"element":"state","position":"3"},
+            {"element":"assigned_to","position":"4"},{"element":"sys_created_on","position":"5"},
+            {"element":"sys_created_by","position":"6"}
+        ])),
+        "/api/now/table/sys_ui_form" => Some(json!([
+            {"sys_id":"demo_default","name":"incident","view":""},
+            {"sys_id":"demo_compact","name":"incident","view":"Compact","view.name":"compact"}
+        ])),
+        "/api/now/table/sys_ui_form_section" => Some(json!([
+            {"sys_ui_form":"demo_default","sys_ui_section":"demo_details","position":"0"},
+            {"sys_ui_form":"demo_default","sys_ui_section":"demo_resolution","position":"1"},
+            {"sys_ui_form":"demo_compact","sys_ui_section":"demo_summary","position":"0"}
+        ])),
+        "/api/now/table/sys_ui_section" => Some(json!([
+            {"sys_id":"demo_details","caption":"Incident details"},
+            {"sys_id":"demo_resolution","caption":"Resolution"},
+            {"sys_id":"demo_summary","caption":"Summary"}
+        ])),
+        "/api/now/table/sys_ui_element" => {
+            let mut elements = Vec::new();
+            for (section, fields) in [
+                (
+                    "demo_details",
+                    vec![
+                        ".start_split",
+                        "number",
+                        "caller_id",
+                        "priority",
+                        ".split",
+                        "state",
+                        "assignment_group",
+                        "assigned_to",
+                        ".end_split",
+                        "short_description",
+                        "description",
+                    ],
+                ),
+                ("demo_resolution", vec!["close_code", "close_notes"]),
+                (
+                    "demo_summary",
+                    vec!["number", "short_description", "state", "assigned_to"],
+                ),
+            ] {
+                for (position, element) in fields.into_iter().enumerate() {
+                    elements.push(json!({"sys_ui_section":section,"element":element,"position":position.to_string()}));
+                }
+            }
+            Some(json!(elements))
+        }
+        "/api/now/table/sys_app_application" => Some(json!([
+            {"sys_id":"demo_desk","title":"Service Desk","roles":""}
+        ])),
+        "/api/now/table/sys_app_module" => Some(json!([
+            {"sys_id":"demo_new","application":"demo_desk","title":"Create incident","link_type":"NEW","name":"incident","order":"100"},
+            {"sys_id":"demo_sep_lists","application":"demo_desk","title":"Lists","link_type":"SEPARATOR","order":"200"},
+            {"sys_id":"demo_open","application":"demo_desk","title":"Open incidents","link_type":"LIST","name":"incident","filter":"active=true","order":"210"},
+            {"sys_id":"demo_compact_list","application":"demo_desk","title":"Compact incident view","link_type":"LIST","name":"incident","view_name":"compact","order":"220"},
+            {"sys_id":"demo_unsupported","application":"demo_desk","title":"Workspace (excluded)","link_type":"DIRECT","query":"/now/workspace/agent/home","order":"230"}
+        ])),
+        "/api/now/table/sys_user_has_role" => Some(json!([{"role.name":"itil"}])),
+        _ => None,
+    };
+    if let Some(result) = classic_metadata {
+        return write_json_response(&mut stream, 200, &[], &json!({ "result": result })).await;
+    }
+    if path == "/api/now/table/sys_user"
+        && query_pairs
+            .get("sysparm_query")
+            .is_some_and(|query| query == "sys_id=javascript:gs.getUserID()")
+    {
+        return write_json_response(
+            &mut stream,
+            200,
+            &[],
+            &json!({"result":[{"sys_id":"demo","user_name":"demo","name":"Demo User"}]}),
+        )
+        .await;
     }
 
     if path == "/api/now/table/sys_journal_field" {
@@ -555,6 +752,20 @@ async fn handle_http_connection(
     // Generic Table API: `/api/now/table/{table}` or `/api/now/table/{table}/{sys_id}`
     if let Some(rest) = path.strip_prefix("/api/now/table/") {
         let parts: Vec<&str> = rest.split('/').filter(|s| !s.is_empty()).collect();
+        if method != "GET"
+            && parts
+                .first()
+                .is_some_and(|table| is_plain_demo_table(table))
+            && state.read().reject_ui_writes
+        {
+            return write_json_response(
+                &mut stream,
+                403,
+                &[],
+                &json!({"error": {"message": "Operation Failed", "detail": "ACL restricts the record operation"}}),
+            )
+            .await;
+        }
         if parts.len() == 1 {
             let table = parts[0];
             if method == "GET" {
@@ -648,6 +859,14 @@ async fn handle_http_connection(
                     &json!({ "result": record_to_sn_json(&updated) }),
                 )
                 .await;
+            } else if method == "DELETE" {
+                let removed = state
+                    .write()
+                    .tables
+                    .get_mut(table)
+                    .and_then(|rows| rows.shift_remove(sys_id));
+                let status = if removed.is_some() { 204 } else { 404 };
+                return write_json_response(&mut stream, status, &[], &json!({})).await;
             }
         }
     }
@@ -681,6 +900,26 @@ fn create_or_patch_demo_record(
 ) -> SnRecord {
     let mut store = state.write();
     let now_str = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+
+    if is_plain_demo_table(table) {
+        let sys_id = existing_sys_id.map(str::to_string).unwrap_or_else(|| {
+            let seq = store.next_number_seq;
+            store.next_number_seq += 1;
+            format!("{table}_demo_{seq}")
+        });
+        let rows = store.tables.entry(table.to_string()).or_default();
+        let mut record = rows.get(&sys_id).cloned().unwrap_or_else(|| {
+            let mut fields = IndexMap::new();
+            fields.insert("sys_id".to_string(), FieldValue::scalar(&sys_id));
+            SnRecord::from_field_map(table, fields, false)
+        });
+        for (key, value) in payload {
+            let value = value.as_str().unwrap_or_default();
+            record.fields.insert(key.clone(), FieldValue::scalar(value));
+        }
+        rows.insert(sys_id, record.clone());
+        return record;
+    }
 
     let sys_id = match existing_sys_id {
         Some(id) => id.to_string(),
@@ -807,64 +1046,50 @@ fn matches_journal_query(j: &JournalEntry, query: &str) -> bool {
     true
 }
 
+/// Evaluates an encoded query the way the Table API does: any `^NQ` group may match, every
+/// row in it must, and a row matches through any of its `^OR` alternatives.
 fn matches_sn_query(rec: &SnRecord, query: &str) -> bool {
-    if query.trim().is_empty() {
-        return true;
-    }
-    for seg in query.split('^') {
-        if seg.is_empty() || seg == "EQ" || seg.starts_with("ORDERBY") || seg.starts_with("OR") {
-            continue;
+    let query = EncodedQuery::parse(&query.replace("javascript:gs.getUserID()", DEMO_USER_SYS_ID));
+    query.groups.is_empty()
+        || query.groups.iter().any(|group| {
+            group.rows.iter().all(|row| {
+                row.alternatives.iter().any(|condition| match condition {
+                    Condition::Clause(clause) => clause_matches(rec, clause),
+                    // Conditions the sandbox does not model never exclude a record.
+                    Condition::Raw(_) => true,
+                })
+            })
+        })
+}
+
+fn clause_matches(rec: &SnRecord, clause: &FilterClause) -> bool {
+    let raw = rec.get_raw(&clause.field);
+    let display = rec.get_display(&clause.field);
+    let value = clause.value.as_str();
+    let lower = |text: &str| text.to_ascii_lowercase();
+    let equals = raw == value || display.eq_ignore_ascii_case(value);
+    let contains = lower(raw).contains(&lower(value)) || lower(display).contains(&lower(value));
+    match clause.operator {
+        FilterOperator::Equals => equals,
+        FilterOperator::NotEquals => !equals,
+        FilterOperator::Contains => contains,
+        FilterOperator::DoesNotContain => !contains,
+        FilterOperator::StartsWith => {
+            lower(raw).starts_with(&lower(value)) || lower(display).starts_with(&lower(value))
         }
-        if let Some((f, v)) = seg.split_once("!=") {
-            if rec.get_raw(f) == v {
-                return false;
-            }
-        } else if let Some((f, v)) = seg.split_once("<=") {
-            if rec.get_raw(f) > v {
-                return false;
-            }
-        } else if let Some((f, v)) = seg.split_once(">=") {
-            if rec.get_raw(f) < v {
-                return false;
-            }
-        } else if let Some((f, v)) = seg.split_once("LIKE") {
-            let needle = v.to_ascii_lowercase();
-            let hay_raw = rec.get_raw(f).to_ascii_lowercase();
-            let hay_disp = rec.get_display(f).to_ascii_lowercase();
-            if !hay_raw.contains(&needle) && !hay_disp.contains(&needle) {
-                return false;
-            }
-        } else if let Some((f, v)) = seg.split_once("STARTSWITH") {
-            let needle = v.to_ascii_lowercase();
-            if !rec.get_display(f).to_ascii_lowercase().starts_with(&needle)
-                && !rec.get_raw(f).to_ascii_lowercase().starts_with(&needle)
-            {
-                return false;
-            }
-        } else if let Some(f) = seg.strip_suffix("ISEMPTY") {
-            if !rec.get_raw(f).is_empty() {
-                return false;
-            }
-        } else if let Some(f) = seg.strip_suffix("ISNOTEMPTY") {
-            if rec.get_raw(f).is_empty() {
-                return false;
-            }
-        } else if let Some((f, v)) = seg.split_once('>') {
-            if rec.get_raw(f) <= v {
-                return false;
-            }
-        } else if let Some((f, v)) = seg.split_once('<') {
-            if rec.get_raw(f) >= v {
-                return false;
-            }
-        } else if let Some((f, v)) = seg.split_once('=')
-            && rec.get_raw(f) != v
-            && !rec.get_display(f).eq_ignore_ascii_case(v)
-        {
-            return false;
+        FilterOperator::EndsWith => {
+            lower(raw).ends_with(&lower(value)) || lower(display).ends_with(&lower(value))
         }
+        FilterOperator::LessOrEqual => raw <= value,
+        FilterOperator::GreaterOrEqual => raw >= value,
+        FilterOperator::LessThan => raw < value,
+        FilterOperator::GreaterThan => raw > value,
+        FilterOperator::IsEmpty | FilterOperator::EmptyString => raw.is_empty(),
+        FilterOperator::IsNotEmpty => !raw.is_empty(),
+        FilterOperator::In => value.split(',').any(|item| item == raw),
+        FilterOperator::NotIn => !value.split(',').any(|item| item == raw),
+        _ => true,
     }
-    true
 }
 
 fn apply_sn_sort(rows: &mut Vec<&SnRecord>, query: &str) {
@@ -874,7 +1099,14 @@ fn apply_sn_sort(rows: &mut Vec<&SnRecord>, query: &str) {
             return;
         }
         if let Some(field) = seg.strip_prefix("ORDERBY") {
-            rows.sort_by(|a, b| a.get_display(field).cmp(b.get_display(field)));
+            // Numeric fields such as `order` must not sort as text ("10" before "2").
+            rows.sort_by(|a, b| {
+                let (a, b) = (a.get_display(field), b.get_display(field));
+                match (a.parse::<f64>(), b.parse::<f64>()) {
+                    (Ok(x), Ok(y)) => x.total_cmp(&y),
+                    _ => a.cmp(b),
+                }
+            });
             return;
         }
     }
@@ -1238,6 +1470,37 @@ mod tests {
         assert!(schema.fields.contains_key("number"));
         assert!(schema.fields.contains_key("caller_id"));
         assert!(!schema.choices_for("state", None).is_empty());
+        assert!(
+            schema
+                .default_list_columns
+                .contains(&"sys_created_by".into())
+        );
+        assert_eq!(client.current_account().await.unwrap().user_name, "demo");
+        // Modules nest under the "Lists" separator; the workspace module is excluded.
+        let apps = client.fetch_application_menu().await.unwrap();
+        let titles = |nodes: &[sn_core::NavNode]| -> Vec<String> {
+            nodes.iter().map(|node| node.title.clone()).collect()
+        };
+        assert_eq!(titles(&apps[0].children), ["Create incident", "Lists"]);
+        assert_eq!(
+            titles(&apps[0].children[1].children),
+            ["Open incidents", "Compact incident view"]
+        );
+        // Favorites nest inside their group; the workspace bookmark is excluded.
+        let favorites = client.fetch_user_favorites().await.unwrap();
+        assert_eq!(titles(&favorites), ["Create incident (compact)", "Queues"]);
+        assert_eq!(
+            titles(&favorites[1].children),
+            ["Critical incidents", "Unassigned incidents"]
+        );
+        services.sync_form_views(&client, &schema).await;
+        let views: Vec<sn_core::ClassicFormView> = cache
+            .get_account_metadata(&profile.id, "forms:incident")
+            .unwrap()
+            .unwrap();
+        assert_eq!(views.len(), 2);
+        assert_eq!(views[0].sections[0].title, "Incident details");
+        assert_eq!(views[1].name, "compact");
 
         // 2. List incidents -> cache page -> verify instant SWR cache hit
         let page = client

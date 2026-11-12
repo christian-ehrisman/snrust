@@ -5,12 +5,14 @@
 //! Code + PKCE (`S256`) loopback authentication, and macOS Keychain secret storage.
 
 pub mod auth;
+pub mod classic;
 pub mod client;
 pub mod keychain;
 pub mod metadata;
 
 pub use auth::{OAuthPkceFlow, PendingOAuthSession, PkceChallenge, refresh_access_token};
-pub use client::{ListRecordsParams, RecordWatermark, SnClient};
+pub use classic::FavoriteChange;
+pub use client::{ListRecordsParams, RecordWatermark, SnClient, oauth_access_hint};
 pub use keychain::{
     CredentialStore, KEYCHAIN_SERVICE, MacKeychainStore, MemoryCredentialStore, StoredCredentials,
 };

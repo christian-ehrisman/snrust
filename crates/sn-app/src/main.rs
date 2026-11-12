@@ -1,33 +1,38 @@
 //! macOS-native 120fps ServiceNow desktop client (`snrust`) built on Rust + GPUI.
 
 mod actions;
+mod column_panel;
 mod command_palette;
 mod connect_modal;
 mod demo_server;
+mod favorites;
+mod field_picker;
+mod filter_builder;
 mod form_view;
 mod list_view;
+mod preferences;
+mod prefs;
+mod reference_preview;
 mod state;
 mod theme;
+#[cfg(test)]
+mod ui_tests;
 mod workspace;
 
 use gpui_kit::assets::AllAssets;
 use gpui_kit::component::TitleBar;
-use gpui_kit::component::theme::ThemeMode;
 use gpui_kit::*;
 use sn_cache::SnCache;
+use tracing_subscriber::fmt::writer::MakeWriterExt as _;
 
 use crate::actions::*;
+use crate::prefs::AppPrefs;
 use crate::state::AppServices;
 use crate::theme::apply_snrust_theme;
 use crate::workspace::WorkspaceShell;
 
 fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "snrust=info,sn_api=info,sn_realtime=info".into()),
-        )
-        .init();
+    init_logging();
 
     // Dedicated multi-threaded Tokio runtime powering HTTP/2 REST, OAuth loopback,
     // AMB WebSockets, adaptive delta-polling, and background SQLite tasks off the UI thread.
@@ -47,7 +52,8 @@ fn main() {
         .with_assets(AllAssets)
         .run(move |cx| {
             gpui_kit::init(cx);
-            apply_snrust_theme(ThemeMode::Dark, cx);
+            AppPrefs::install(cache.clone(), cx);
+            apply_snrust_theme(cx);
             register_menus_and_keys(cx);
 
             let (services, cmd_rx) = AppServices::new(tokio_handle.clone(), cache.clone());
@@ -76,7 +82,8 @@ fn register_menus_and_keys(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("cmd-q", QuitApp, None),
         KeyBinding::new("cmd-k", OpenCommandPalette, None),
-        KeyBinding::new("cmd-,", OpenInstanceManager, None),
+        KeyBinding::new("cmd-,", OpenPreferences, None),
+        KeyBinding::new("cmd-shift-,", OpenInstanceManager, None),
         KeyBinding::new("cmd-s", SaveActiveForm, None),
         KeyBinding::new("cmd-shift-s", UpdateAndCloseActiveForm, None),
         KeyBinding::new("cmd-r", RefreshActiveView, None),
@@ -85,12 +92,17 @@ fn register_menus_and_keys(cx: &mut App) {
         KeyBinding::new("cmd-\\", ToggleSplitPane, None),
         KeyBinding::new("cmd-w", CloseActiveTab, None),
         KeyBinding::new("cmd-n", NewRecordInActiveTable, None),
+        KeyBinding::new("cmd-=", IncreaseUiScale, None),
+        KeyBinding::new("cmd-+", IncreaseUiScale, None),
+        KeyBinding::new("cmd--", DecreaseUiScale, None),
+        KeyBinding::new("cmd-0", ResetUiScale, None),
     ]);
 
     cx.set_menus(vec![
         Menu {
             name: "snrust".into(),
             items: vec![
+                MenuItem::action("Settings…", OpenPreferences),
                 MenuItem::action("Instance Connections…", OpenInstanceManager),
                 MenuItem::separator(),
                 MenuItem::action("Toggle Dark / Light Theme", ToggleThemeMode),
@@ -118,10 +130,48 @@ fn register_menus_and_keys(cx: &mut App) {
                 MenuItem::action("Refresh View", RefreshActiveView),
                 MenuItem::action("Customize Form Auto-Grid", ToggleCustomizeGrid),
                 MenuItem::separator(),
+                MenuItem::action("Zoom In", IncreaseUiScale),
+                MenuItem::action("Zoom Out", DecreaseUiScale),
+                MenuItem::action("Actual Size", ResetUiScale),
+                MenuItem::separator(),
                 MenuItem::action("Toggle Sidebar", ToggleSidebar),
                 MenuItem::action("Toggle Side-by-Side Split", ToggleSplitPane),
             ],
             disabled: false,
         },
     ]);
+}
+
+/// Size at which the log rotates to `snrust.log.1`, bounding disk use to two files.
+const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
+
+/// Logs to stderr and `~/Library/Logs/snrust/snrust.log` (also browsable in Console.app).
+///
+/// A Finder-launched `.app` discards stderr, so the file is the only record of rejected
+/// ServiceNow requests there. Verbosity is overridable with `RUST_LOG`.
+fn init_logging() {
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "snrust=info,sn_api=info,sn_realtime=info".into());
+    let builder = tracing_subscriber::fmt().with_env_filter(filter);
+    match open_log_file() {
+        Some(file) => builder
+            .with_ansi(false)
+            .with_writer(std::io::stderr.and(std::sync::Mutex::new(file)))
+            .init(),
+        None => builder.init(),
+    }
+}
+
+fn open_log_file() -> Option<std::fs::File> {
+    let dir = std::path::PathBuf::from(std::env::var_os("HOME")?).join("Library/Logs/snrust");
+    std::fs::create_dir_all(&dir).ok()?;
+    let path = dir.join("snrust.log");
+    if std::fs::metadata(&path).is_ok_and(|meta| meta.len() > MAX_LOG_BYTES) {
+        let _ = std::fs::rename(&path, dir.join("snrust.log.1"));
+    }
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .ok()
 }

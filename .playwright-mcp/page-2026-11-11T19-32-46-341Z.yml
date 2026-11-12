@@ -1,0 +1,11 @@
+- generic [active] [ref=f203e1]:
+  - generic [ref=f203e2]: Loading application...
+  - generic [ref=f203e8]:
+    - generic [ref=f203e9]:
+      - text: We use cookies on this site to improve your browsing experience, analyze individualized usage and website traffic, tailor content to your preferences, and make your interactions with our website more meaningful. To learn more about the cookies we use and how you can change your preferences, please read our
+      - link "Cookie Policy" [ref=f203e10] [cursor=pointer]:
+        - /url: //www.servicenow.com/cookie-policy.html
+      - text: and visit our
+      - link "Cookie Preference Manager" [ref=f203e11] [cursor=pointer]
+      - text: . By clicking “Accept and Proceed,” closing this banner or continuing to browse this site, you consent to the use of cookies.
+    - button "Accept and Proceed" [ref=f203e13] [cursor=pointer]

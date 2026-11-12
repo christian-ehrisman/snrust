@@ -666,7 +666,7 @@ async fn metadata_catalog_schema_inheritance_merge_and_acl_403_fallbacks() {
     // 2. Schema merge (`task` + `incident` dictionary, choices, and `sys_ui_list` columns)
     Mock::given(method("GET"))
         .and(path("/api/now/table/sys_dictionary"))
-        .and(query_param("sysparm_query", "nameINincident,task^active=true"))
+        .and(query_param("sysparm_query", "nameINincident,task,sys^active=true^ORDERBYsys_id"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "result": [
                 {
@@ -708,7 +708,7 @@ async fn metadata_catalog_schema_inheritance_merge_and_acl_403_fallbacks() {
         .and(path("/api/now/table/sys_choice"))
         .and(query_param(
             "sysparm_query",
-            "nameINincident,task^inactive=false",
+            "nameINincident,task,sys^inactive=false^ORDERBYsys_id",
         ))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "result": [
@@ -770,6 +770,12 @@ async fn metadata_catalog_schema_inheritance_merge_and_acl_403_fallbacks() {
         .await
         .unwrap();
     assert_eq!(schema.display_field, "number");
+    assert_eq!(schema.fields["sys_created_by"].column_label, "Created by");
+    assert_eq!(
+        schema.fields["sys_created_on"].field_type,
+        FieldType::DateTime
+    );
+    assert!(schema.fields["sys_created_on"].read_only);
     assert_eq!(
         schema.default_list_columns,
         vec!["number", "caller_id", "state"]
@@ -892,4 +898,63 @@ async fn port_busy_error_and_create_record() {
     let created = client.create_record("incident", &payload).await.unwrap();
     assert_eq!(created.sys_id, "created_sys_id");
     assert_eq!(created.get_display("number"), "INC0077777");
+}
+
+#[tokio::test]
+async fn verify_api_access_surfaces_scope_restricted_403_with_detail_and_hint() {
+    let server = MockServer::start().await;
+    let profile = test_profile(&server.uri());
+    let store = Arc::new(MemoryCredentialStore::with_credentials(
+        profile.id.clone(),
+        valid_creds("tok-scoped"),
+    ));
+    let client = SnClient::new(profile, store).unwrap();
+
+    Mock::given(method("GET"))
+        .and(path("/api/now/table/sys_user"))
+        .and(bearer_token("tok-scoped"))
+        .and(query_param("sysparm_limit", "1"))
+        .and(query_param("sysparm_fields", "sys_id"))
+        .respond_with(ResponseTemplate::new(403).set_body_json(json!({
+            "error": {
+                "message": "User Not Authorized",
+                "detail": "Missing required api access scope"
+            },
+            "status": "failure"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let err = client.verify_api_access().await.unwrap_err();
+    assert!(matches!(err, SnError::Api { status: 403, .. }));
+    assert_eq!(
+        err.to_string(),
+        "ServiceNow HTTP 403: User Not Authorized (Missing required api access scope)"
+    );
+    let hint = sn_api::oauth_access_hint(&err).expect("403 maps to a registry remediation hint");
+    assert!(hint.contains("Auth Scopes"));
+    assert!(hint.contains("Scope Restriction"));
+    assert!(hint.contains("Enforce Token Restrictions"));
+    assert!(sn_api::oauth_access_hint(&SnError::Network("timeout".into())).is_none());
+
+    let ok_server = MockServer::start().await;
+    let ok_profile = test_profile(&ok_server.uri());
+    let ok_store = Arc::new(MemoryCredentialStore::with_credentials(
+        ok_profile.id.clone(),
+        valid_creds("tok-ok"),
+    ));
+    Mock::given(method("GET"))
+        .and(path("/api/now/table/sys_user"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "result": [{ "sys_id": "6816f79cc0a8016401c5a33be04be441" }]
+        })))
+        .expect(1)
+        .mount(&ok_server)
+        .await;
+    SnClient::new(ok_profile, ok_store)
+        .unwrap()
+        .verify_api_access()
+        .await
+        .expect("200 from sys_user means REST access works");
 }

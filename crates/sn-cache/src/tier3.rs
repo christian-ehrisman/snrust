@@ -19,7 +19,7 @@ impl SnCache {
         let mut stmt = conn
             .prepare_cached(
                 "SELECT id, name, base_url, client_id, has_client_secret,
-                        callback_port, scopes, accent_hex, created_at, last_connected_at
+                        callback_port, scopes, accent_hex, created_at, last_connected_at, account_json
                  FROM instances
                  ORDER BY created_at ASC, name COLLATE NOCASE ASC",
             )
@@ -43,6 +43,17 @@ impl SnCache {
                     accent_hex: r.get(7)?,
                     created_at: parse_ts(&created_raw),
                     last_connected_at: last_conn_raw.as_deref().map(parse_ts),
+                    account: r
+                        .get::<_, Option<String>>(10)?
+                        .map(|json| serde_json::from_str(&json))
+                        .transpose()
+                        .map_err(|err| {
+                            rusqlite::Error::FromSqlConversionFailure(
+                                10,
+                                rusqlite::types::Type::Text,
+                                Box::new(err),
+                            )
+                        })?,
                 })
             })
             .map_err(cache_err)?;
@@ -63,8 +74,8 @@ impl SnCache {
         conn.execute(
             "INSERT INTO instances
                 (id, name, base_url, client_id, has_client_secret,
-                 callback_port, scopes, accent_hex, created_at, last_connected_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                 callback_port, scopes, accent_hex, created_at, last_connected_at, account_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
              ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
                 base_url = excluded.base_url,
@@ -74,7 +85,8 @@ impl SnCache {
                 scopes = excluded.scopes,
                 accent_hex = excluded.accent_hex,
                 created_at = excluded.created_at,
-                last_connected_at = excluded.last_connected_at",
+                last_connected_at = excluded.last_connected_at,
+                account_json = excluded.account_json",
             params![
                 profile.id.as_str(),
                 profile.name,
@@ -86,6 +98,11 @@ impl SnCache {
                 profile.accent_hex,
                 created_str,
                 last_conn_str,
+                profile
+                    .account
+                    .as_ref()
+                    .map(serde_json::to_string)
+                    .transpose()?,
             ],
         )
         .map_err(cache_err)?;
@@ -110,6 +127,7 @@ impl SnCache {
             "DELETE FROM recent_items WHERE instance_id = ?1",
             "DELETE FROM form_layouts WHERE instance_id = ?1",
             "DELETE FROM list_columns WHERE instance_id = ?1",
+            "DELETE FROM account_metadata WHERE instance_id = ?1",
             "DELETE FROM instances WHERE id = ?1",
         ] {
             tx.execute(sql, params![id.as_str()]).map_err(cache_err)?;
@@ -162,6 +180,38 @@ impl SnCache {
                 .map_err(cache_err)?;
             }
         }
+        Ok(())
+    }
+
+    /// Reads an application-wide setting (not scoped to an instance) stored as JSON.
+    pub fn get_setting<T: serde::de::DeserializeOwned>(&self, key: &str) -> SnResult<Option<T>> {
+        let json: Option<String> = self
+            .inner
+            .conn
+            .lock()
+            .query_row(
+                "SELECT value FROM workspace_kv WHERE key = ?1",
+                params![key],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(cache_err)?;
+        json.map(|value| serde_json::from_str(&value).map_err(Into::into))
+            .transpose()
+    }
+
+    /// Persists an application-wide setting as JSON, replacing any previous value.
+    pub fn set_setting<T: serde::Serialize>(&self, key: &str, value: &T) -> SnResult<()> {
+        let json = serde_json::to_string(value)?;
+        self.inner
+            .conn
+            .lock()
+            .execute(
+                "INSERT INTO workspace_kv (key, value) VALUES (?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                params![key, json],
+            )
+            .map_err(cache_err)?;
         Ok(())
     }
 
@@ -367,6 +417,17 @@ impl SnCache {
         instance_id: &InstanceId,
         layout: &FormGridLayout,
     ) -> SnResult<()> {
+        self.save_form_layout_for_view(instance_id, layout, "")
+    }
+
+    /// Persists an override without sharing it with another account or named view.
+    pub fn save_form_layout_for_view(
+        &self,
+        instance_id: &InstanceId,
+        layout: &FormGridLayout,
+        view: &str,
+    ) -> SnResult<()> {
+        let key = sn_core::classic::view_cache_key(&layout.table, view);
         let layout_json = serde_json::to_string(layout)?;
         let updated_str = format_ts(layout.updated_at);
 
@@ -377,15 +438,69 @@ impl SnCache {
              ON CONFLICT(instance_id, table_name) DO UPDATE SET
                 layout_json = excluded.layout_json,
                 updated_at = excluded.updated_at",
-            params![instance_id.as_str(), layout.table, layout_json, updated_str],
+            params![instance_id.as_str(), key, layout_json, updated_str],
         )
         .map_err(cache_err)?;
         drop(conn);
 
-        self.inner.layout_cache.insert(
-            (instance_id.clone(), layout.table.clone()),
-            Some(layout.clone()),
-        );
+        self.inner
+            .layout_cache
+            .insert((instance_id.clone(), key), Some(layout.clone()));
+        Ok(())
+    }
+
+    pub fn delete_list_columns(&self, instance_id: &InstanceId, key: &str) -> SnResult<()> {
+        self.inner
+            .conn
+            .lock()
+            .execute(
+                "DELETE FROM list_columns WHERE instance_id=?1 AND table_name=?2",
+                params![instance_id.as_str(), key],
+            )
+            .map_err(cache_err)?;
+        self.inner
+            .list_columns_cache
+            .invalidate(&(instance_id.clone(), key.to_string()));
+        Ok(())
+    }
+
+    /// Cached server metadata is kept apart from local overrides and credential storage.
+    pub fn get_account_metadata<T: serde::de::DeserializeOwned>(
+        &self,
+        id: &InstanceId,
+        key: &str,
+    ) -> SnResult<Option<T>> {
+        let json: Option<String> = self
+            .inner
+            .conn
+            .lock()
+            .query_row(
+                "SELECT value_json FROM account_metadata WHERE instance_id=?1 AND key=?2",
+                params![id.as_str(), key],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(cache_err)?;
+        json.map(|value| serde_json::from_str(&value).map_err(Into::into))
+            .transpose()
+    }
+
+    pub fn save_account_metadata<T: serde::Serialize>(
+        &self,
+        id: &InstanceId,
+        key: &str,
+        value: &T,
+    ) -> SnResult<()> {
+        let json = serde_json::to_string(value)?;
+        self.inner
+            .conn
+            .lock()
+            .execute(
+                "INSERT INTO account_metadata(instance_id,key,value_json) VALUES (?1,?2,?3)
+             ON CONFLICT(instance_id,key) DO UPDATE SET value_json=excluded.value_json",
+                params![id.as_str(), key, json],
+            )
+            .map_err(cache_err)?;
         Ok(())
     }
 

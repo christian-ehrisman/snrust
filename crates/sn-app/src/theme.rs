@@ -1,13 +1,36 @@
 //! Bespoke macOS-native Linear/Zed/Raycast-inspired palette & semantic ServiceNow badge colors.
 
 use gpui_kit::component::theme::{ActiveTheme as _, Theme, ThemeMode};
-use gpui_kit::{App, Hsla, hsla, px, rgb};
+use gpui_kit::{App, Hsla, Pixels, Rems, hsla, px, rems, rgb};
 
-/// Applies `snrust`'s high-contrast, crisp desktop aesthetic over `gpui-component`'s theme tokens.
-pub fn apply_snrust_theme(mode: ThemeMode, cx: &mut App) {
+use crate::prefs::AppPrefs;
+
+/// Body text size at 100% UI scale. The window's rem size tracks the scaled value.
+const BASE_FONT_PX: f32 = 13.0;
+
+/// A design-pixel length (as drawn at 100%) that follows the UI scale.
+///
+/// Use for text sizes and for boxes that hold text. Hairlines, radii and status dots stay
+/// in `px` so they remain crisp.
+pub fn sp(design_px: f32) -> Rems {
+    rems(design_px / BASE_FONT_PX)
+}
+
+/// [`sp`] for APIs that only accept pixels, such as dialog and table column widths.
+pub fn spx(design_px: f32, cx: &App) -> Pixels {
+    px(design_px * AppPrefs::get(cx).ui_scale)
+}
+
+/// Applies `snrust`'s high-contrast, crisp desktop aesthetic over `gpui-component`'s theme
+/// tokens, using the appearance and UI scale from [`AppPrefs`].
+pub fn apply_snrust_theme(cx: &mut App) {
+    let prefs = AppPrefs::get(cx);
+    let mode = prefs.theme_mode(cx.window_appearance());
+    let scale = prefs.ui_scale;
     Theme::change(mode, None, cx);
     let theme = Theme::global_mut(cx);
-    theme.font_size = px(13.0);
+    theme.font_size = px(BASE_FONT_PX * scale);
+    theme.mono_font_size = px(BASE_FONT_PX * scale);
     theme.radius = px(6.0);
     theme.radius_lg = px(10.0);
 

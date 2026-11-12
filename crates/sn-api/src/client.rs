@@ -247,6 +247,14 @@ impl SnClient {
             })?;
 
             if !status.is_success() {
+                tracing::warn!(
+                    instance = %self.inner.profile.name,
+                    %method,
+                    url,
+                    status = status.as_u16(),
+                    body = %body.chars().take(512).collect::<String>(),
+                    "ServiceNow API request rejected"
+                );
                 return Err(parse_sn_api_error(status, &body));
             }
 
@@ -258,6 +266,23 @@ impl SnClient {
 
     fn table_url(&self, table: &str) -> String {
         format!("{}/api/now/table/{}", self.inner.profile.base_url, table)
+    }
+
+    /// Confirms the stored OAuth token can actually call the Table API by reading a single
+    /// `sys_user` `sys_id`.
+    ///
+    /// ServiceNow can issue a token at sign-in and still refuse every REST call (Application
+    /// Registry scope restriction, REST API Access Policies). Running this right after sign-in
+    /// surfaces that as the server's `401`/`403` instead of a "connected" instance with empty lists.
+    pub async fn verify_api_access(&self) -> SnResult<()> {
+        let params = [
+            ("sysparm_limit", "1".to_string()),
+            ("sysparm_fields", "sys_id".to_string()),
+            ("sysparm_no_count", "true".to_string()),
+        ];
+        self.execute_authenticated(Method::GET, &self.table_url("sys_user"), &params, None)
+            .await
+            .map(|_| ())
     }
 
     fn record_url(&self, table: &str, sys_id: &str) -> String {
@@ -647,6 +672,33 @@ struct SnErrorEnvelope {
 struct SnErrorDetail {
     message: Option<String>,
     detail: Option<String>,
+}
+
+/// Admin-facing remediation for ServiceNow refusing REST calls made with a freshly issued
+/// OAuth token, keyed on the status [`SnClient::verify_api_access`] returned.
+///
+/// Field names match the Application Registry (`oauth_entity`) form: Scope Restriction
+/// (`scope_restriction_status`), Enforce Token Restrictions (`restricted_binding`), and
+/// Bind Access Token to Session (`bind_token_to_session`).
+pub fn oauth_access_hint(err: &SnError) -> Option<&'static str> {
+    match err {
+        SnError::Api { status: 403, .. } => Some(
+            "ServiceNow accepted the sign-in but refused REST API access (typically \"Missing \
+             required api access scope\"). In System OAuth → Application Registry, open the snrust \
+             record: make sure its Auth Scopes list includes \"useraccount\", set Scope Restriction \
+             to \"Broadly scoped\" (or \"Useraccount scoped\"), and uncheck \"Enforce Token \
+             Restrictions\". Also check REST API Access Policies (sys_api_access_policy.list) for a \
+             policy covering the Table API that excludes OAuth. Then sign in again. \
+             scripts/servicenow/diagnose-oauth-access.js (Scripts - Background) pinpoints the setting.",
+        ),
+        SnError::Api { status: 401, .. } => Some(
+            "ServiceNow rejected the newly issued access token. In System OAuth → Application \
+             Registry, uncheck \"Bind Access Token to Session\" on the snrust record, and check \
+             REST API Access Policies (sys_api_access_policy.list) for a policy whose inbound \
+             authentication profiles exclude OAuth. Then sign in again.",
+        ),
+        _ => None,
+    }
 }
 
 fn parse_sn_api_error(status: StatusCode, body: &str) -> SnError {

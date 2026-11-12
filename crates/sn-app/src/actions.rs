@@ -6,6 +6,7 @@ gpui_kit::actions!(
         QuitApp,
         OpenCommandPalette,
         OpenInstanceManager,
+        OpenPreferences,
         SaveActiveForm,
         UpdateAndCloseActiveForm,
         RefreshActiveView,
@@ -13,6 +14,9 @@ gpui_kit::actions!(
         ToggleSidebar,
         ToggleSplitPane,
         ToggleThemeMode,
+        IncreaseUiScale,
+        DecreaseUiScale,
+        ResetUiScale,
         CloseActiveTab,
         NewRecordInActiveTable,
     ]

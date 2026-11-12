@@ -308,6 +308,32 @@ pub struct TableSchema {
 }
 
 impl TableSchema {
+    /// Label for a possibly dot-walked column such as `caller_id.email` ("Caller › Email").
+    ///
+    /// `related` supplies the schema of a referenced table. Returns `None` when any segment
+    /// is unknown or a needed schema is unavailable, so callers can retry once it is cached.
+    pub fn dot_walk_label(
+        &self,
+        path: &str,
+        related: impl Fn(&str) -> Option<TableSchema>,
+    ) -> Option<String> {
+        let mut segments = path.split('.').peekable();
+        let mut labels = Vec::new();
+        let mut owned: Option<TableSchema> = None;
+        while let Some(segment) = segments.next() {
+            let schema = owned.as_ref().unwrap_or(self);
+            let field = schema.fields.get(segment)?;
+            labels.push(field.column_label.clone());
+            if segments.peek().is_some() {
+                let FieldType::Reference { target_table } = &field.field_type else {
+                    return None;
+                };
+                owned = Some(related(target_table)?);
+            }
+        }
+        Some(labels.join(" › "))
+    }
+
     /// Builds a merged schema where child dictionary overrides win over parent definitions.
     pub fn assemble(
         table: impl Into<String>,
@@ -322,7 +348,7 @@ impl TableSchema {
         let mut merged_choices: HashMap<String, Vec<ChoiceOption>> = HashMap::new();
 
         // Merge from root -> child so child table choice overrides take precedence!
-        for ancestor in hierarchy.iter().rev() {
+        for ancestor in std::iter::once(&"sys".to_string()).chain(hierarchy.iter().rev()) {
             if let Some(table_choices) = choices_by_table.get(ancestor) {
                 for (elem, opts) in table_choices {
                     let mut active_opts: Vec<ChoiceOption> =
@@ -336,7 +362,7 @@ impl TableSchema {
         }
 
         let mut merged_fields: IndexMap<String, DictionaryEntry> = IndexMap::new();
-        for ancestor in hierarchy.iter().rev() {
+        for ancestor in std::iter::once(&"sys".to_string()).chain(hierarchy.iter().rev()) {
             if let Some(entries) = entries_by_table.get(ancestor) {
                 for entry in entries {
                     if entry.element.is_empty() || entry.internal_type == "collection" {
@@ -413,6 +439,7 @@ impl TableSchema {
                 if cols.len() >= 7 {
                     break;
                 }
+
                 if entry.active
                     && !entry.is_system_audit_field()
                     && !entry.is_journal()
@@ -427,6 +454,36 @@ impl TableSchema {
             cols.push("sys_id".to_string());
         }
         cols
+    }
+
+    /// Audit columns exist even where their global dictionary definitions are hidden.
+    /// Child/parent definitions always take precedence.
+    pub fn ensure_system_fields(&mut self) {
+        for (element, label, internal_type) in [
+            ("sys_id", "Sys ID", "string"),
+            ("sys_created_on", "Created", "glide_date_time"),
+            ("sys_created_by", "Created by", "string"),
+            ("sys_updated_on", "Updated", "glide_date_time"),
+            ("sys_updated_by", "Updated by", "string"),
+            ("sys_mod_count", "Updates", "integer"),
+        ] {
+            self.fields
+                .entry(element.to_string())
+                .or_insert_with(|| DictionaryEntry {
+                    element: element.into(),
+                    column_label: label.into(),
+                    defined_on_table: "sys".into(),
+                    internal_type: internal_type.into(),
+                    field_type: FieldType::from_dictionary(internal_type, None, None, false),
+                    max_length: None,
+                    mandatory: false,
+                    read_only: true,
+                    active: true,
+                    display: false,
+                    default_value: None,
+                    dependent_on: None,
+                });
+        }
     }
 
     /// Returns choice options applicable to `element`, optionally filtered by `dependent_value`.

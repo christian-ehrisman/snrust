@@ -1,0 +1,447 @@
+- generic [ref=f67e1]:
+  - generic [ref=f67e8]:
+    - generic [ref=f67e9]:
+      - text: We use cookies on this site to improve your browsing experience, analyze individualized usage and website traffic, tailor content to your preferences, and make your interactions with our website more meaningful. To learn more about the cookies we use and how you can change your preferences, please read our
+      - link "Cookie Policy" [ref=f67e10] [cursor=pointer]:
+        - /url: //www.servicenow.com/cookie-policy.html
+      - text: and visit our
+      - link "Cookie Preference Manager" [ref=f67e11] [cursor=pointer]
+      - text: . By clicking “Accept and Proceed,” closing this banner or continuing to browse this site, you consent to the use of cookies.
+    - button "Accept and Proceed" [ref=f67e13] [cursor=pointer]
+  - text: ⋮ 
+  - generic [ref=f67e14]:
+    - button "Skip to main content" [ref=f67e15] [cursor=pointer]
+    - banner [ref=f67e16]:
+      - banner [ref=f67e17]:
+        - generic [ref=f67e19]:
+          - link [ref=f67e21] [cursor=pointer]:
+            - /url: https://www.servicenow.com/
+            - img "ServiceNow" [ref=f67e22]
+          - navigation [ref=f67e23]:
+            - navigation [ref=f67e25]:
+              - button "Products" [ref=f67e26] [cursor=pointer]
+              - button "Industries" [ref=f67e27] [cursor=pointer]
+              - button "Learning" [ref=f67e28] [cursor=pointer]
+              - button "Support" [ref=f67e29] [cursor=pointer]
+              - button "Partners" [ref=f67e30] [cursor=pointer]
+              - button "Company" [ref=f67e31] [cursor=pointer]
+          - generic [ref=f67e32]:
+            - button "Select your country" [ref=f67e34] [cursor=pointer]:
+              - img "Select your country" [ref=f67e35]
+            - link "Get Started" [ref=f67e37] [cursor=pointer]:
+              - /url: https://www.servicenow.com/contact-us.html
+      - generic [ref=f67e39]:
+        - generic [ref=f67e45]:
+          - img "info-icon" [ref=f67e47]
+          - generic [ref=f67e48]:
+            - text: We've upgraded how our search works to help you find what you need faster. Read more about recent changes to this site in the
+            - link "documentation site release notes" [ref=f67e49] [cursor=pointer]:
+              - /url: https://www.servicenow.com/docs/r/using-this-site/explore-doc-site.html
+            - text: .
+          - button "Close message" [ref=f67e50] [cursor=pointer]:
+            - img "close-button" [ref=f67e51]
+        - generic [ref=f67e52]:
+          - generic [ref=f67e57]:
+            - link "Documentation" [ref=f67e58] [cursor=pointer]:
+              - /url: https://www.servicenow.com/docs/home
+            - link "Product directory" [ref=f67e61] [cursor=pointer]:
+              - /url: https://www.servicenow.com/docs/p/product-directory/product-directory.html
+            - link "Release notes" [ref=f67e64] [cursor=pointer]:
+              - /url: https://www.servicenow.com/docs/r/release-notes/family-release-notes.html
+            - link "PDF library" [ref=f67e67] [cursor=pointer]:
+              - /url: https://www.servicenow.com/docs/r/pdf-archive/pdf-archive.html
+            - link "APIs" [ref=f67e70] [cursor=pointer]:
+              - /url: https://www.servicenow.com/docs/r/api-reference/api-implementation-reference.html
+            - link "Accessibility" [ref=f67e73] [cursor=pointer]:
+              - /url: https://www.servicenow.com/docs/r/accessibility/product_accessibility.html
+            - link "GitHub" [ref=f67e77] [cursor=pointer]:
+              - /url: https://github.com/ServiceNow/ServiceNowDocs
+          - button "Sign in" [ref=f67e86] [cursor=pointer]
+    - generic [ref=f67e92]:
+      - generic [ref=f67e99]:
+        - generic [ref=f67e101]:
+          - link "Secure your instance pdf" [ref=f67e105] [cursor=pointer]:
+            - /url: https://downloads.docs.servicenow.com/pdf/enus/servicenow-zurich-platform-security-enus.pdf
+            - generic [ref=f67e107]: 
+            - generic [ref=f67e108]: Secure your instance
+          - generic [ref=f67e114]:
+            - button "Expand all table of contents" [ref=f67e117]:
+              - generic [ref=f67e118]: Expand all
+            - tree "OAuth inbound" [ref=f67e697]:
+              - treeitem "Secure your instance" [ref=f67e122] [cursor=pointer]
+              - treeitem "ServiceNow Vault" [ref=f67e127] [cursor=pointer]:
+                - generic [ref=f67e128]: 
+              - treeitem "Now Assist for Vault" [ref=f67e133] [cursor=pointer]:
+                - generic [ref=f67e134]: 
+              - treeitem "Platform Security" [ref=f67e139] [cursor=pointer]:
+                - generic [ref=f67e140]: 
+              - treeitem "Antivirus Scanning" [ref=f67e145] [cursor=pointer]:
+                - generic [ref=f67e146]: 
+              - treeitem "HTML sanitizer" [ref=f67e151] [cursor=pointer]:
+                - generic [ref=f67e152]: 
+              - treeitem "Auditing" [ref=f67e157] [cursor=pointer]:
+                - generic [ref=f67e158]: 
+              - treeitem "High Security Settings" [ref=f67e163] [cursor=pointer]:
+                - generic [ref=f67e164]: 
+              - treeitem "Virtual Private Network (VPN)" [ref=f67e169] [cursor=pointer]:
+                - generic [ref=f67e170]: 
+              - treeitem "Platform Privacy" [ref=f67e175] [cursor=pointer]:
+                - generic [ref=f67e176]: 
+              - treeitem "Encryption" [ref=f67e181] [cursor=pointer]:
+                - generic [ref=f67e182]: 
+              - generic [ref=f67e186]:
+                - treeitem "Access Management" [expanded] [ref=f67e187] [cursor=pointer]:
+                  - generic [ref=f67e188]: 
+                - group [ref=f67e192]:
+                  - treeitem "Zero Trust Access" [ref=f67e194] [cursor=pointer]:
+                    - generic [ref=f67e195]: 
+                  - treeitem "Domain separation for service providers" [ref=f67e200] [cursor=pointer]:
+                    - generic [ref=f67e201]: 
+                  - treeitem "Authentication" [ref=f67e206] [cursor=pointer]:
+                    - generic [ref=f67e207]: 
+                  - treeitem "API access policy" [ref=f67e212] [cursor=pointer]:
+                    - generic [ref=f67e213]: 
+                  - treeitem "Authentication factors" [ref=f67e218] [cursor=pointer]:
+                    - generic [ref=f67e219]: 
+                  - treeitem "Certificate-based authentication" [ref=f67e224] [cursor=pointer]:
+                    - generic [ref=f67e225]: 
+                  - treeitem "Custom instance URLs" [ref=f67e230] [cursor=pointer]:
+                    - generic [ref=f67e231]: 
+                  - treeitem "Installation exits" [ref=f67e236] [cursor=pointer]
+                  - treeitem "IP range based authentication" [ref=f67e241] [cursor=pointer]:
+                    - generic [ref=f67e242]: 
+                  - treeitem "LDAP integration" [ref=f67e247] [cursor=pointer]:
+                    - generic [ref=f67e248]: 
+                  - treeitem "Limit concurrent sessions" [ref=f67e253] [cursor=pointer]:
+                    - generic [ref=f67e254]: 
+                  - treeitem "Local authentication" [ref=f67e259] [cursor=pointer]:
+                    - generic [ref=f67e260]: 
+                  - treeitem "Multi-factor authentication" [ref=f67e265] [cursor=pointer]:
+                    - generic [ref=f67e266]: 
+                  - treeitem "Multi-Provider single sign-on (SSO)" [ref=f67e271] [cursor=pointer]:
+                    - generic [ref=f67e272]: 
+                  - generic [ref=f67e276]:
+                    - treeitem "OAuth authentication" [expanded] [ref=f67e277] [cursor=pointer]:
+                      - generic [ref=f67e278]: 
+                    - group [ref=f67e282]:
+                      - treeitem "OAuth 2.0" [ref=f67e284] [cursor=pointer]:
+                        - generic [ref=f67e285]: 
+                      - generic [ref=f67e310]:
+                        - treeitem "OAuth inbound" [expanded] [ref=f67e311] [cursor=pointer]:
+                          - generic [ref=f67e312]: 
+                        - group [ref=f67e698]:
+                          - treeitem "Inbound Integrations" [ref=f67e700] [cursor=pointer]:
+                            - generic [ref=f67e701]: 
+                          - treeitem "Old inbound integrations experience" [ref=f67e706] [cursor=pointer]:
+                            - generic [ref=f67e707]: 
+                          - treeitem "Manage OAuth tokens" [ref=f67e712] [cursor=pointer]:
+                            - generic [ref=f67e713]: 
+                      - treeitem "OAuth outbound" [ref=f67e317] [cursor=pointer]:
+                        - generic [ref=f67e318]: 
+                  - treeitem "Personal authentication" [ref=f67e323] [cursor=pointer]:
+                    - generic [ref=f67e324]: 
+                  - treeitem "Self-register to ServiceNow instance" [ref=f67e329] [cursor=pointer]:
+                    - generic [ref=f67e330]: 
+                  - treeitem "Token based authentication (User logins)" [ref=f67e335] [cursor=pointer]:
+                    - generic [ref=f67e336]: 
+                  - treeitem "Web service security" [ref=f67e341] [cursor=pointer]:
+                    - generic [ref=f67e342]: 
+                  - treeitem "Access Control List Rules" [ref=f67e347] [cursor=pointer]:
+                    - generic [ref=f67e348]: 
+                  - treeitem "Access analyzer" [ref=f67e353] [cursor=pointer]:
+                    - generic [ref=f67e354]: 
+                  - treeitem "Security Attributes" [ref=f67e359] [cursor=pointer]:
+                    - generic [ref=f67e360]: 
+                  - treeitem "Field Query Roles and Restrictions" [ref=f67e365] [cursor=pointer]:
+                    - generic [ref=f67e366]: 
+                  - treeitem "Scripting Governance Tool" [ref=f67e371] [cursor=pointer]:
+                    - generic [ref=f67e372]: 
+                  - treeitem "Machine identity access controls" [ref=f67e377] [cursor=pointer]:
+                    - generic [ref=f67e378]: 
+                  - treeitem "Data filtration" [ref=f67e383] [cursor=pointer]:
+                    - generic [ref=f67e384]: 
+                  - treeitem "Security data filters" [ref=f67e389] [cursor=pointer]:
+                    - generic [ref=f67e390]: 
+                  - treeitem "Security Roles" [ref=f67e395] [cursor=pointer]:
+                    - generic [ref=f67e396]: 
+                  - treeitem "Connections and Credentials" [ref=f67e401] [cursor=pointer]:
+                    - generic [ref=f67e402]: 
+                  - treeitem "ServiceNow access control" [ref=f67e407] [cursor=pointer]:
+                    - generic [ref=f67e408]: 
+              - treeitem "Identity" [ref=f67e413] [cursor=pointer]:
+                - generic [ref=f67e414]: 
+              - treeitem "Access observer" [ref=f67e419] [cursor=pointer]:
+                - generic [ref=f67e420]: 
+              - treeitem "Granular Admin Roles" [ref=f67e425] [cursor=pointer]
+              - treeitem "Additional resources" [ref=f67e430] [cursor=pointer]
+              - treeitem "Virtual infrastructure security" [ref=f67e435] [cursor=pointer]
+              - treeitem "Operating system security" [ref=f67e440] [cursor=pointer]
+              - treeitem "Network security" [ref=f67e445] [cursor=pointer]
+        - generic [ref=f67e449]:
+          - generic [ref=f67e450]:
+            - generic [ref=f67e451]:
+              - generic [ref=f67e718]:
+                - link "Home" [ref=f67e719] [cursor=pointer]
+                - generic [ref=f67e721]: ">"
+                - link "Access Management" [ref=f67e722] [cursor=pointer]:
+                  - /url: https://www.servicenow.com/docs/r/zurich/platform-security/access-management-landing.html
+                - generic [ref=f67e723]: ">"
+                - link "..." [ref=f67e725] [cursor=pointer]:
+                  - /url: "#"
+                - generic [ref=f67e726]: ">"
+                - generic [ref=f67e727]: OAuth inbound
+              - heading "OAuth inbound" [level=1] [ref=f67e728]
+              - generic [ref=f67e470]:
+                - generic [ref=f67e475]:
+                  - generic [ref=f67e476]: Release version
+                  - generic [ref=f67e730]:
+                    - generic:
+                      - 'generic "Release: zurich" [ref=f67e733] [cursor=pointer]':
+                        - generic [ref=f67e734]: zurich
+                        - generic [ref=f67e737]: 
+                      - generic: Release
+                      - generic: australia
+                      - generic: brazil
+                      - generic: xanadu
+                      - generic: yokohama
+                - generic:
+                  - generic: ft:locale
+                  - generic: pt-BR
+                  - generic: de-DE
+                  - generic: ko-KR
+                  - generic: ja-JP
+                  - generic: fr-FR
+                - generic [ref=f67e485]:
+                  - generic [ref=f67e491]:
+                    - img "copy" [ref=f67e741]
+                    - generic [ref=f67e742]:
+                      - generic [ref=f67e743]: Link copied to clipboard
+                      - button "✖" [ref=f67e745] [cursor=pointer]
+                  - generic [ref=f67e503]:
+                    - button [ref=f67e746] [cursor=pointer]:
+                      - img "Copy Markdown URL" [ref=f67e747]
+                    - generic:
+                      - button "✖"
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic: "Yes"
+                          - generic: "No"
+                        - generic: Submit
+            - search [ref=f67e510]:
+              - combobox "What would you like to know?" [ref=f67e513]
+              - link "Search" [ref=f67e519] [cursor=pointer]:
+                - /url: https://www.servicenow.com/docs/search?content-lang=en-US&negative-value-filters=ft%253ApublicationId~%2522oJu9n0q6rU%255C%255C~F9UHAnNCt5w%2522
+                - generic [ref=f67e521]: 
+          - main
+          - article [ref=f67e750]:
+            - generic [ref=f67e751]:
+              - main [ref=f67e756]:
+                - article "OAuth inbound" [ref=f67e757]:
+                  - generic [ref=f67e758]:
+                    - generic [ref=f67e759]: Updated July 31, 2025
+                    - generic [ref=f67e760]: 4 minutes to read
+                  - group [ref=f67e762]:
+                    - generic "Summarize" [ref=f67e763] [cursor=pointer]
+                  - generic [ref=f67e769]:
+                    - paragraph [ref=f67e770]: OAuth Inbound authentication allows trusted external applications to securely access ServiceNow APIs, ensuring controlled and authorized connections.
+                    - generic [ref=f67e771]:
+                      - text: "You must have one of the following roles to configure or manage OAuth integrations in the system:"
+                      - list [ref=f67e772]:
+                        - listitem [ref=f67e773]: oauth_admin
+                        - listitem [ref=f67e774]: mi_admin
+                        - listitem [ref=f67e775]: admin
+                    - paragraph [ref=f67e776]: "Inbound authentication enables external applications such as third-party systems or other ServiceNow® instances to connect securely to ServiceNow APIs. Inbound authentication confirms that only trusted clients can access your ServiceNow instance in a controlled and secure manner. ServiceNow supports several OAuth 2.0 grant types, each designed for specific integration scenarios. Use the following information to choose the grant type that best fits your use case:"
+                    - generic [ref=f67e777]:
+                      - heading "Authorization Code Grant" [level=2] [ref=f67e778]
+                      - table [ref=f67e779]:
+                        - caption
+                        - rowgroup [ref=f67e783]:
+                          - row [ref=f67e784]:
+                            - columnheader "Ideal usage scenario" [ref=f67e785]
+                            - columnheader "Functionality" [ref=f67e786]
+                        - rowgroup [ref=f67e787]:
+                          - row [ref=f67e788]:
+                            - cell [ref=f67e789]:
+                              - text: Applications that must access user data on behalf of user with the user’s consent.
+                              - paragraph [ref=f67e790]: "Example: Web, mobile, or desktop applications acting on behalf of a user."
+                            - cell [ref=f67e791]:
+                              - text: The user initiates the login process from the client application, which redirects them to a ServiceNow login page. After the user logs in and grants consent, the client application receives an authorization code. The client application exchanges the authorization code with the ServiceNow instance for an access token.
+                              - paragraph [ref=f67e792]: Authorization code grant is the most secure and widely used workflow for user-facing integrations. It supports both confidential clients (with a client secret) and public clients using Proof Key for Code Exchange (PKCE).
+                      - paragraph [ref=f67e793]: For more information about Authorization code grant workflow and configuration, see
+                    - generic [ref=f67e794]:
+                      - heading "Client Credentials Grant" [level=2] [ref=f67e795]
+                      - table [ref=f67e796]:
+                        - caption
+                        - rowgroup [ref=f67e800]:
+                          - row [ref=f67e801]:
+                            - columnheader "Ideal Usage Scenario" [ref=f67e802]
+                            - columnheader "Functionality" [ref=f67e803]
+                        - rowgroup [ref=f67e804]:
+                          - row [ref=f67e805]:
+                            - cell "Client applications such as back-end services or automated system integrations that must access ServiceNow APIs without user involvement." [ref=f67e806]
+                            - cell "The client application authenticates directly with the ServiceNow instance using its own credentials (client ID and secret). Once authenticated, the application receives an access token to access the ServiceNow APIs." [ref=f67e807]
+                      - paragraph [ref=f67e808]: For more information about Client credentials grant workflow and configuration, see .
+                    - generic [ref=f67e809]:
+                      - heading "Third party ID Token Flow" [level=2] [ref=f67e810]
+                      - table [ref=f67e811]:
+                        - caption
+                        - rowgroup [ref=f67e815]:
+                          - row [ref=f67e816]:
+                            - columnheader "Ideal Usage Scenario" [ref=f67e817]
+                            - columnheader "Functionality" [ref=f67e818]
+                        - rowgroup [ref=f67e819]:
+                          - row [ref=f67e820]:
+                            - cell "Federated authentication scenarios where ServiceNow trusts identity or access tokens issued by external identity providers such as Azure AD or Okta." [ref=f67e821]
+                            - cell "The client application obtains an ID or access token from a trusted third-party identity provider, and includes it in the authorization header when making API requests to the ServiceNow instance. ServiceNow validates the token and, if trusted, grants access based on the identity it asserts. This enables seamless single sign-on (SSO) and federated authentication across systems." [ref=f67e822]
+                      - paragraph [ref=f67e823]: For more information about Third party token flow and configuration, see.
+                    - generic [ref=f67e824]:
+                      - heading "JWT Bearer Grant" [level=2] [ref=f67e825]
+                      - table [ref=f67e826]:
+                        - caption
+                        - rowgroup [ref=f67e830]:
+                          - row [ref=f67e831]:
+                            - columnheader "Ideal Usage Scenario" [ref=f67e832]
+                            - columnheader "Functionality" [ref=f67e833]
+                        - rowgroup [ref=f67e834]:
+                          - row [ref=f67e835]:
+                            - cell [ref=f67e836]:
+                              - text: Client applications that need secure access to ServiceNow resources, either on behalf of a user or as themselves, without requiring user interaction or storing a shared secret.
+                              - paragraph [ref=f67e837]: The client application creates a signed JSON Web Token (JWT) that includes identity-related claims, such as the user or system it represents. It then presents it to the ServiceNow instance to request for access token.
+                            - cell [ref=f67e838]:
+                              - generic [ref=f67e839]:
+                                - term [ref=f67e840]: "When acting on behalf of a user:"
+                                - definition [ref=f67e841]: The token represents a previously authenticated user. This enables secure, seamless access without prompting the user for credentials or consent again. The signed token asserts the user’s identity, enabling ServiceNow to trust the request without requiring real-time user interaction.
+                                - term [ref=f67e842]: "When acting as itself:"
+                                - definition [ref=f67e843]: The token identifies and authenticates the client application directly. Instead of using a shared secret, the client signs the token with a private key, making it a more secure alternative to the client credentials grant.
+                      - paragraph [ref=f67e844]: For more information about JWT bearer grant workflow and configuration, see .
+                    - generic [ref=f67e845]:
+                      - heading "Resource Owner Password Credentials Grant" [level=2] [ref=f67e846]
+                      - table [ref=f67e847]:
+                        - caption
+                        - rowgroup [ref=f67e851]:
+                          - row [ref=f67e852]:
+                            - columnheader "Ideal Usage Scenario" [ref=f67e853]
+                            - columnheader "Functionality" [ref=f67e854]
+                        - rowgroup [ref=f67e855]:
+                          - row [ref=f67e856]:
+                            - cell "Highly trusted internal client applications in controlled environments where the app collects the user’s credentials directly." [ref=f67e857]
+                            - cell "The client application collects the user’s user name and password, and redirects them to the ServiceNow instance to obtain an access token. The workflow bypasses redirection and consent screens, but exposes user credentials to the client application. ServiceNow recommends that you implement the Resource owner password credentials grant only in legacy or controlled environments." [ref=f67e858]
+                      - paragraph [ref=f67e859]:
+                        - text: For more information about Resource owner password credentials grant workflow and configuration, see
+                        - link "Resource owner password credential grant" [ref=f67e860] [cursor=pointer]:
+                          - /url: https://www.servicenow.com/docs/r/oJu9n0q6rU~F9UHAnNCt5w/DCo54ZriiS80_dzln64P5w
+                        - text: .
+                    - generic [ref=f67e861]:
+                      - heading "Implicit Grants" [level=2] [ref=f67e862]
+                      - table [ref=f67e863]:
+                        - caption
+                        - rowgroup [ref=f67e867]:
+                          - row [ref=f67e868]:
+                            - columnheader "Ideal Usage Scenario" [ref=f67e869]
+                            - columnheader "Functionality" [ref=f67e870]
+                        - rowgroup [ref=f67e871]:
+                          - row [ref=f67e872]:
+                            - cell "Legacy Single-page applications (SPAs) or browser-based apps that can’t securely store a client secret, and require a lightweight, client-side authentication flow." [ref=f67e873]
+                            - cell [ref=f67e874]:
+                              - text: The user logs in through a browser. The client application receives the access token directly in the URL after login, bypassing the intermediate authorization code step.
+                              - paragraph [ref=f67e875]: This flow was originally designed for public clients that run entirely in the browser, where securely storing secrets isn’t possible. While it simplifies implementation, it exposes tokens in the browser, increasing the risk of interception. For stronger security, ServiceNow recommends implementing an authorization code grant with PKCE.
+                      - paragraph [ref=f67e876]:
+                        - text: For more information about Implicit grant workflow and configuration, see
+                        - link "OAuth implicit grants" [ref=f67e877] [cursor=pointer]:
+                          - /url: https://www.servicenow.com/docs/r/oJu9n0q6rU~F9UHAnNCt5w/70Df8WnzGVV7N7C_75fI8g
+                        - text: .
+                    - generic [ref=f67e878]:
+                      - heading "OAuth Scopes" [level=2] [ref=f67e879]
+                      - paragraph [ref=f67e880]:
+                        - text: You can scope the OAuth authentication scope support for REST API. OAuth Scope provides access to only the particular REST APIs. For more information, see
+                        - link "REST API Auth Scope" [ref=f67e881] [cursor=pointer]:
+                          - /url: https://www.servicenow.com/docs/r/oJu9n0q6rU~F9UHAnNCt5w/HUFvKmsDCR6C4wQhlK02iw
+                        - text: .
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - button "Open"
+                  - generic:
+                    - generic: Send feedback
+                    - generic: Rate this content
+                    - generic:
+                      - generic: "Yes"
+                      - generic: "No"
+                    - generic: Not rated
+                    - generic: Write your review
+                    - generic: Submit
+              - generic [ref=f67e883]:
+                - generic [ref=f67e884]: Was this topic helpful?
+                - generic [ref=f67e887]:
+                  - button "Provide feedback" [ref=f67e889] [cursor=pointer]
+                  - generic:
+                    - generic: Rate this content
+                    - generic:
+                      - generic: "Yes"
+                      - generic: "No"
+                    - generic: Not rated
+                    - generic: Write your review
+                    - generic: Submit
+              - generic [ref=f67e895]:
+                - 'link "Previous section: Change OAuth password parameter" [ref=f67e900] [cursor=pointer]':
+                  - /url: https://www.servicenow.com/docs/r/zurich/platform-security/authentication/OAuth-token-processor-parm.html
+                  - generic: 
+                - 'link "Next section: Inbound Integrations" [ref=f67e909] [cursor=pointer]':
+                  - /url: https://www.servicenow.com/docs/r/zurich/platform-security/authentication/new-inbound-integrations.html
+                  - generic: 
+      - contentinfo [ref=f67e648]:
+        - generic [ref=f67e649]:
+          - generic [ref=f67e650]:
+            - heading [level=3] [ref=f67e652]:
+              - img "ServiceNow" [ref=f67e653]
+              - generic [ref=f67e654]:
+                - text: The world works with ServiceNow
+                - superscript [ref=f67e655]: ™
+            - generic [ref=f67e656]:
+              - link "Twitter" [ref=f67e657] [cursor=pointer]:
+                - /url: https://twitter.com/servicenow
+              - link "YouTube" [ref=f67e659] [cursor=pointer]:
+                - /url: https://www.youtube.com/user/servicenowinc
+              - link "Linkedin" [ref=f67e661] [cursor=pointer]:
+                - /url: https://www.linkedin.com/company/servicenow
+              - link "Facebook" [ref=f67e663] [cursor=pointer]:
+                - /url: https://www.facebook.com/servicenow
+              - link "Instagram" [ref=f67e665] [cursor=pointer]:
+                - /url: https://www.instagram.com/servicenow/
+              - link "TikTok" [ref=f67e667] [cursor=pointer]:
+                - /url: https://www.tiktok.com/@servicenow
+          - list [ref=f67e670]:
+            - listitem [ref=f67e671]:
+              - button "Select your country" [ref=f67e673] [cursor=pointer]: United States - Global
+            - listitem [ref=f67e676]:
+              - link "Site terms" [ref=f67e677] [cursor=pointer]:
+                - /url: https://www.servicenow.com/terms-of-use.html
+            - listitem [ref=f67e678]:
+              - link "GDPR" [ref=f67e679] [cursor=pointer]:
+                - /url: https://www.servicenow.com/company/trust/privacy/gdpr.html
+            - listitem [ref=f67e680]:
+              - link "Privacy statement" [ref=f67e681] [cursor=pointer]:
+                - /url: https://www.servicenow.com/privacy-statement.html
+            - listitem [ref=f67e682]:
+              - link "Your privacy choices" [ref=f67e683] [cursor=pointer]:
+                - /url: https://www.servicenow.com/privacy-preferences.html
+            - listitem [ref=f67e684]:
+              - link "Cookie policy" [ref=f67e685] [cursor=pointer]:
+                - /url: https://www.servicenow.com/cookie-policy.html
+            - listitem [ref=f67e686]:
+              - link "Cookie preferences" [ref=f67e687] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=f67e688]:
+              - link "Sitemap" [ref=f67e689] [cursor=pointer]:
+                - /url: https://www.servicenow.com/sitemap.html
+            - listitem [ref=f67e690]:
+              - link "Business continuity" [ref=f67e691] [cursor=pointer]:
+                - /url: https://www.servicenow.com/content/dam/servicenow-assets/public/en-us/doc-type/public-document/servicenow-business-continuity-faq.pdf
+            - listitem [ref=f67e692]:
+              - link "Accessibility" [ref=f67e693] [cursor=pointer]:
+                - /url: https://www.servicenow.com/accessibility-statement.html
+            - listitem
+            - listitem [ref=f67e694]: ©️ 2026 ServiceNow. All rights reserved.

@@ -441,9 +441,14 @@ mod tests {
     fn encoded_query_roundtrips_clauses_and_sorts() {
         let raw = "active=true^priority<=2^short_descriptionLIKEvpn^ORDERBYDESCnumber";
         let mut parsed = EncodedQuery::parse(raw);
-        assert_eq!(parsed.clauses.len(), 3);
-        assert_eq!(parsed.clauses[1].operator, FilterOperator::LessOrEqual);
-        assert_eq!(parsed.clauses[2].operator, FilterOperator::Contains);
+        let clauses: Vec<_> = parsed.groups[0]
+            .rows
+            .iter()
+            .filter_map(|row| row.as_single_clause())
+            .collect();
+        assert_eq!(clauses.len(), 3);
+        assert_eq!(clauses[1].operator, FilterOperator::LessOrEqual);
+        assert_eq!(clauses[2].operator, FilterOperator::Contains);
         assert_eq!(parsed.sorts.len(), 1);
         assert!(parsed.sorts[0].descending);
         assert_eq!(parsed.to_encoded_string(), raw);

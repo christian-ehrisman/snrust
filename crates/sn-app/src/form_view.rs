@@ -30,15 +30,17 @@ use gpui_kit::component::{
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use sn_api::SnClient;
-use sn_cache::FavoriteItem;
 use sn_core::{
-    ColSpan, DictionaryEntry, FieldConflict, FieldType, FieldValue, FormGridLayout,
+    ClassicTarget, ColSpan, DictionaryEntry, FieldConflict, FieldType, FieldValue, FormGridLayout,
     FormSessionState, GridVisualRow, JournalEntry, ReferenceCandidate, SnRecord, TableSchema,
 };
 use sn_realtime::{RealtimeEvent, SubscriptionGuard, WatchTarget};
 
+use crate::favorites;
+use crate::prefs::{AppPrefs, Density};
+use crate::reference_preview::{is_single_reference, reference_link};
 use crate::state::{AppServices, WorkspaceCommand};
-use crate::theme::{priority_badge_colors, state_badge_colors};
+use crate::theme::{priority_badge_colors, sp, spx, state_badge_colors};
 
 const LIVE_PULSE_DURATION: Duration = Duration::from_millis(2800);
 
@@ -237,7 +239,7 @@ impl Render for ReferencePickerModal {
             .when(self.is_searching, |el| {
                 el.child(
                     div()
-                        .text_size(px(11.0))
+                        .text_size(sp(11.0))
                         .text_color(theme.primary)
                         .child("Searching ServiceNow…"),
                 )
@@ -245,7 +247,7 @@ impl Render for ReferencePickerModal {
             .child(
                 v_flex()
                     .id("ref-candidates-scroll")
-                    .max_h(px(320.0))
+                    .max_h(sp(320.0))
                     .overflow_y_scroll()
                     .gap_1()
                     .children(
@@ -281,7 +283,7 @@ impl Render for ReferencePickerModal {
                                             .when_some(cand.secondary, |el, sec| {
                                                 el.child(
                                                     div()
-                                                        .text_size(px(11.0))
+                                                        .text_size(sp(11.0))
                                                         .text_color(theme.muted_foreground)
                                                         .truncate()
                                                         .child(sec),
@@ -291,7 +293,7 @@ impl Render for ReferencePickerModal {
                                     .child(
                                         div()
                                             .font_family(theme.mono_font_family.clone())
-                                            .text_size(px(10.0))
+                                            .text_size(sp(10.0))
                                             .text_color(theme.muted_foreground)
                                             .child(cand.sys_id.chars().take(8).collect::<String>()),
                                     )
@@ -299,6 +301,37 @@ impl Render for ReferencePickerModal {
                     ),
             )
     }
+}
+
+/// Opens the searchable reference picker for `target_table`. Shared by form reference
+/// fields and the list filter builder.
+pub(crate) fn open_reference_dialog(
+    services: AppServices,
+    client: SnClient,
+    target_table: String,
+    on_pick: impl Fn(ReferenceCandidate, &mut Window, &mut App) + 'static,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let modal = cx.new(|cx| {
+        ReferencePickerModal::new(services, client, target_table.clone(), on_pick, window, cx)
+    });
+    let first_focus = Cell::new(true);
+    window.open_dialog(cx, move |dialog, window, cx| {
+        if first_focus.replace(false) {
+            modal
+                .read(cx)
+                .search_input
+                .focus_handle(cx)
+                .focus(window, cx);
+        }
+        dialog
+            .w(spx(540.0, cx))
+            .title(format!("Select Reference — {target_table}"))
+            .close_button(true)
+            .overlay_closable(true)
+            .child(modal.clone())
+    });
 }
 
 enum FieldWidgetControl {
@@ -319,6 +352,7 @@ pub struct FormViewPanel {
     schema: Option<TableSchema>,
     layout: FormGridLayout,
     session: FormSessionState,
+    view: String,
 
     controls: HashMap<String, FieldWidgetControl>,
     work_notes_input: Entity<TextareaState>,
@@ -339,12 +373,14 @@ pub struct FormViewPanel {
 }
 
 impl FormViewPanel {
+    #[allow(clippy::too_many_arguments)]
     pub fn open_existing(
         services: AppServices,
         client: SnClient,
         table: String,
         sys_id: String,
         seed_record: Option<SnRecord>,
+        view: String,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -392,14 +428,19 @@ impl FormViewPanel {
         let mut session = FormSessionState::from_existing_record(inst_id.clone(), initial_record);
         let _ = session.merge_journals(cached_journals);
 
-        let layout = Self::resolve_layout(&services, &inst_id, &table, cached_schema.as_ref());
-        let fav_id = format!("fav:rec:{table}:{sys_id}");
-        let is_favorited = services
-            .cache
-            .list_favorites(&inst_id)
-            .unwrap_or_default()
-            .iter()
-            .any(|f| f.id == fav_id);
+        let layout =
+            Self::resolve_layout(&services, &inst_id, &table, &view, cached_schema.as_ref());
+        let is_favorited = favorites::find(
+            &services,
+            &inst_id,
+            &ClassicTarget::Form {
+                table: table.clone(),
+                sys_id: sys_id.clone(),
+                query: String::new(),
+                view: sn_core::classic::normalize_view(&view),
+            },
+        )
+        .is_some();
 
         let mut panel = Self::build_common(
             services,
@@ -407,6 +448,7 @@ impl FormViewPanel {
             cached_schema,
             layout,
             session,
+            view,
             swr_ms,
             is_favorited,
             window,
@@ -420,6 +462,8 @@ impl FormViewPanel {
         services: AppServices,
         client: SnClient,
         table: String,
+        view: String,
+        initial_query: String,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -430,8 +474,38 @@ impl FormViewPanel {
             .ok()
             .flatten()
             .map(|c| c.data);
-        let session = FormSessionState::new_record(inst_id.clone(), table.clone());
-        let layout = Self::resolve_layout(&services, &inst_id, &table, cached_schema.as_ref());
+        let mut session = FormSessionState::new_record(inst_id.clone(), table.clone());
+        let defaults = sn_core::EncodedQuery::parse(&initial_query);
+        // Only plain `field=value` conditions can be applied as defaults without running
+        // ServiceNow script; anything else is reported once and left for the user.
+        let mut skipped = defaults.groups.len() > 1;
+        for row in defaults
+            .groups
+            .first()
+            .map(|g| g.rows.as_slice())
+            .unwrap_or(&[])
+        {
+            match row.as_single_clause() {
+                Some(clause)
+                    if clause.operator == sn_core::FilterOperator::Equals
+                        && sn_core::classic::valid_table_name(&clause.field)
+                        && !clause.field.starts_with("sys_")
+                        && !clause.value.starts_with("javascript:") =>
+                {
+                    session.edit_field(clause.field.clone(), FieldValue::scalar(&clause.value));
+                }
+                _ => skipped = true,
+            }
+        }
+        if skipped {
+            services.send_cmd(WorkspaceCommand::ToastInfo(
+                "Some module defaults need ServiceNow scripting and were not applied; enter \
+                 those values manually."
+                    .into(),
+            ));
+        }
+        let layout =
+            Self::resolve_layout(&services, &inst_id, &table, &view, cached_schema.as_ref());
 
         let mut panel = Self::build_common(
             services,
@@ -439,6 +513,7 @@ impl FormViewPanel {
             cached_schema,
             layout,
             session,
+            view,
             None,
             false,
             window,
@@ -455,6 +530,7 @@ impl FormViewPanel {
         schema: Option<TableSchema>,
         layout: FormGridLayout,
         session: FormSessionState,
+        view: String,
         swr_hydrated_ms: Option<f64>,
         is_favorited: bool,
         window: &mut Window,
@@ -501,6 +577,7 @@ impl FormViewPanel {
             schema,
             layout,
             session,
+            view,
             controls: HashMap::new(),
             work_notes_input,
             comments_input,
@@ -525,15 +602,37 @@ impl FormViewPanel {
         services: &AppServices,
         inst_id: &sn_core::InstanceId,
         table: &str,
+        view: &str,
         schema: Option<&TableSchema>,
     ) -> FormGridLayout {
-        if let Ok(Some(mut saved)) = services.cache.get_form_layout(inst_id, table) {
+        if let Ok(Some(mut saved)) = services
+            .cache
+            .get_form_layout(inst_id, &sn_core::classic::view_cache_key(table, view))
+        {
             if let Some(s) = schema {
                 saved.reconcile_with_schema(s);
             }
             return saved;
         }
         if let Some(s) = schema {
+            match services
+                .cache
+                .get_account_metadata::<Vec<sn_core::ClassicFormView>>(
+                    inst_id,
+                    &format!("forms:{table}"),
+                ) {
+                Ok(Some(views)) => {
+                    if let Some(server_view) = views
+                        .iter()
+                        .find(|candidate| candidate.name == view)
+                        .or_else(|| views.iter().find(|candidate| candidate.name.is_empty()))
+                    {
+                        return server_view.layout(s);
+                    }
+                }
+                Err(err) => tracing::warn!(%err, "Cannot read cached form views"),
+                _ => {}
+            }
             return FormGridLayout::generate_smart_default(s);
         }
         // Minimal bootstrap layout before schema arrives over the network
@@ -564,6 +663,16 @@ impl FormViewPanel {
         self.session.is_dirty()
     }
 
+    #[cfg(test)]
+    pub fn raw_value(&self, field: &str) -> String {
+        self.session.effective_raw(field).to_string()
+    }
+
+    #[cfg(test)]
+    pub fn is_loading(&self) -> bool {
+        self.is_hydrating
+    }
+
     pub fn toggle_customize_grid(&mut self, cx: &mut Context<Self>) {
         self.customize_grid_mode = !self.customize_grid_mode;
         cx.notify();
@@ -572,6 +681,8 @@ impl FormViewPanel {
     pub fn force_refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !self.session.is_new_record() {
             self.hydrate_from_network(true, window, cx);
+        } else {
+            self.hydrate_schema_only(window, cx);
         }
     }
 
@@ -760,14 +871,24 @@ impl FormViewPanel {
         let handle = services.tokio_handle.clone();
         handle.spawn(async move {
             let res = services.ensure_table_schema(&client, &table, false).await;
+            if let Ok(schema) = &res {
+                services.sync_form_views(&client, schema).await;
+            }
             let _ = tx.send(res).await;
         });
 
         cx.spawn_in(window, async move |this, cx| {
-            if let Ok(Ok(schema)) = rx.recv().await {
+            if let Ok(result) = rx.recv().await {
                 let _ = this.update_in(cx, |panel, window, cx| {
                     panel.is_hydrating = false;
-                    panel.apply_loaded_schema(schema, window, cx);
+                    match result {
+                        Ok(schema) => panel.apply_loaded_schema(schema, window, cx),
+                        Err(err) => panel
+                            .services
+                            .send_cmd(WorkspaceCommand::ToastError(format!(
+                                "Cannot load form schema: {err}"
+                            ))),
+                    }
                 });
             } else {
                 let _ = this.update(cx, |panel, cx| {
@@ -807,6 +928,7 @@ impl FormViewPanel {
 
             match (schema_res, rec_res) {
                 (Ok(schema), Ok(record)) => {
+                    services.sync_form_views(&client, &schema).await;
                     let inst_id = client.profile().id.clone();
                     let journals = jrn_res.unwrap_or_default();
                     let _ = services.cache.upsert_record(&inst_id, &record);
@@ -859,22 +981,15 @@ impl FormViewPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let inst_id = &self.client.profile().id;
-        let has_saved_layout = self
-            .services
-            .cache
-            .get_form_layout(inst_id, &schema.table)
-            .ok()
-            .flatten()
-            .is_some();
-
         // Rebuild controls when schema arrives so Choice & Reference fields upgrade from bootstrap!
         self.controls.clear();
-        if has_saved_layout {
-            self.layout.reconcile_with_schema(&schema);
-        } else if !self.layout.is_customized {
-            self.layout = FormGridLayout::generate_smart_default(&schema);
-        }
+        self.layout = Self::resolve_layout(
+            &self.services,
+            &self.client.profile().id,
+            &schema.table,
+            &self.view,
+            Some(&schema),
+        );
         self.schema = Some(schema);
         self.rebuild_field_controls(window, cx);
         self.sync_clean_controls_from_session(window, cx);
@@ -962,6 +1077,7 @@ impl FormViewPanel {
                 .send_cmd(WorkspaceCommand::ToastInfo("No unsaved changes".into()));
             if close_after {
                 self.services.send_cmd(WorkspaceCommand::RecordSaved {
+                    instance_id: self.client.profile().id.clone(),
                     record: self.session.baseline.clone(),
                     close_after: true,
                 });
@@ -1074,6 +1190,7 @@ impl FormViewPanel {
                                     saved_rec.primary_identifier()
                                 )));
                             panel.services.send_cmd(WorkspaceCommand::RecordSaved {
+                                instance_id: panel.client.profile().id.clone(),
                                 record: saved_rec,
                                 close_after,
                             });
@@ -1094,22 +1211,99 @@ impl FormViewPanel {
     }
 
     fn persist_layout(&self) {
-        let _ = self
-            .services
-            .cache
-            .save_form_layout(&self.client.profile().id, &self.layout);
+        if let Err(err) = self.services.cache.save_form_layout_for_view(
+            &self.client.profile().id,
+            &self.layout,
+            &self.view,
+        ) {
+            self.services.send_cmd(WorkspaceCommand::ToastError(format!(
+                "Cannot save form layout: {err}"
+            )));
+        }
     }
 
     fn reset_layout_to_default(&mut self, cx: &mut Context<Self>) {
         let inst_id = &self.client.profile().id;
-        let _ = self
+        if let Err(err) = self.services.cache.delete_form_layout(
+            inst_id,
+            &sn_core::classic::view_cache_key(&self.session.table, &self.view),
+        ) {
+            self.services
+                .send_cmd(WorkspaceCommand::ToastError(err.to_string()));
+            return;
+        }
+        self.layout = Self::resolve_layout(
+            &self.services,
+            inst_id,
+            &self.session.table,
+            &self.view,
+            self.schema.as_ref(),
+        );
+        cx.notify();
+    }
+
+    fn open_view_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let views = match self
             .services
             .cache
-            .delete_form_layout(inst_id, &self.session.table);
-        if let Some(schema) = &self.schema {
-            self.layout = FormGridLayout::generate_smart_default(schema);
+            .get_account_metadata::<Vec<sn_core::ClassicFormView>>(
+                &self.client.profile().id,
+                &format!("forms:{}", self.session.table),
+            ) {
+            Ok(views) => views.unwrap_or_default(),
+            Err(err) => {
+                self.services
+                    .send_cmd(WorkspaceCommand::ToastError(err.to_string()));
+                return;
+            }
+        };
+        if views.is_empty() {
+            self.services.send_cmd(WorkspaceCommand::ToastInfo(
+                "No ServiceNow form views available. Using the automatic grid.".into(),
+            ));
+            return;
         }
-        cx.notify();
+        let items: Vec<_> = views
+            .into_iter()
+            .map(|view| SnChoiceItem {
+                value: view.name,
+                label: view.label,
+            })
+            .collect();
+        let selected = items
+            .iter()
+            .position(|item| item.value == self.view)
+            .map(|row| IndexPath::default().row(row));
+        let state = cx.new(|cx| {
+            SelectState::new(SearchableVec::new(items), selected, window, cx).searchable(true)
+        });
+        self._control_subs.push(cx.subscribe_in(
+            &state,
+            window,
+            |this, _, event: &SelectEvent<SearchableVec<SnChoiceItem>>, window, cx| {
+                let SelectEvent::Confirm(Some(item)) = event else {
+                    return;
+                };
+                this.view = item.value.clone();
+                this.layout = Self::resolve_layout(
+                    &this.services,
+                    &this.client.profile().id,
+                    &this.session.table,
+                    &this.view,
+                    this.schema.as_ref(),
+                );
+                this.rebuild_field_controls(window, cx);
+                this.refresh_favorite_state(cx);
+                window.close_dialog(cx);
+                cx.notify();
+            },
+        ));
+        window.open_dialog(cx, move |dialog, _, cx| {
+            dialog
+                .title("ServiceNow form view")
+                .w(spx(420.0, cx))
+                .child(Select::new(&state).placeholder("Choose a view").w_full())
+        });
     }
 
     fn open_reference_picker(
@@ -1119,147 +1313,130 @@ impl FormViewPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let services = self.services.clone();
-        let client = self.client.clone();
         let form_weak = cx.entity().downgrade();
-        let fname = field_name.clone();
+        open_reference_dialog(
+            self.services.clone(),
+            self.client.clone(),
+            target_table,
+            move |picked, _, cx| {
+                let _ = form_weak.update(cx, |form, cx| {
+                    form.session.edit_field(
+                        field_name.clone(),
+                        FieldValue::new(picked.sys_id, picked.display_value),
+                    );
+                    cx.notify();
+                });
+            },
+            window,
+            cx,
+        );
+    }
 
-        let modal = cx.new(|cx| {
-            ReferencePickerModal::new(
-                services,
-                client,
-                target_table.clone(),
-                move |picked, _, cx| {
-                    let _ = form_weak.update(cx, |form, cx| {
-                        form.session.edit_field(
-                            fname.clone(),
-                            FieldValue::new(picked.sys_id, picked.display_value),
-                        );
+    fn open_add_hidden_field_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let form_entity = cx.entity().clone();
+        let entries = self
+            .layout
+            .hidden_fields
+            .iter()
+            .map(|name| {
+                let field = self
+                    .schema
+                    .as_ref()
+                    .and_then(|schema| schema.fields.get(name));
+                crate::field_picker::FieldOption {
+                    name: name.clone(),
+                    label: field
+                        .map(|f| f.column_label.clone())
+                        .unwrap_or_else(|| name.clone()),
+                    source: field
+                        .map(|f| f.defined_on_table.clone())
+                        .unwrap_or_default(),
+                    selected: false,
+                }
+            })
+            .collect();
+        let picker = cx.new(|cx| {
+            crate::field_picker::FieldPicker::new(
+                entries,
+                move |name, window, cx| {
+                    form_entity.update(cx, |form, cx| {
+                        let span = form
+                            .schema
+                            .as_ref()
+                            .and_then(|schema| schema.fields.get(name))
+                            .map(|field| {
+                                if field.field_type.prefers_full_width(name, field.max_length) {
+                                    ColSpan::Two
+                                } else {
+                                    ColSpan::One
+                                }
+                            })
+                            .unwrap_or(ColSpan::One);
+                        form.layout.show_field(name, span);
+                        form.rebuild_field_controls(window, cx);
+                        form.persist_layout();
                         cx.notify();
                     });
+                    true
                 },
                 window,
                 cx,
             )
         });
-
         let first_focus = Cell::new(true);
         window.open_dialog(cx, move |dialog, window, cx| {
             if first_focus.replace(false) {
-                modal
-                    .read(cx)
-                    .search_input
-                    .focus_handle(cx)
-                    .focus(window, cx);
+                picker.update(cx, |picker, cx| picker.focus(window, cx));
             }
             dialog
-                .w(px(540.0))
-                .title(format!("Select Reference — {target_table}"))
-                .close_button(true)
-                .overlay_closable(true)
-                .child(modal.clone())
-        });
-    }
-
-    fn open_add_hidden_field_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let form_entity = cx.entity().clone();
-        window.open_dialog(cx, move |dialog, _, cx| {
-            let theme = cx.theme().clone();
-            let panel = form_entity.read(cx);
-            let hidden = panel.layout.hidden_fields.clone();
-            let schema = panel.schema.clone();
-
-            dialog
-                .w(px(480.0))
+                .w(spx(480.0, cx))
                 .title("Add Hidden Field to Form Grid")
                 .close_button(true)
                 .overlay_closable(true)
-                .child(if hidden.is_empty() {
-                    div()
-                        .py_6()
-                        .text_center()
-                        .text_xs()
-                        .text_color(theme.muted_foreground)
-                        .child("All dictionary fields are already placed on the form grid.")
-                        .into_any_element()
-                } else {
-                    v_flex()
-                        .id("hidden-fields-scroll")
-                        .max_h(px(340.0))
-                        .overflow_y_scroll()
-                        .gap_1()
-                        .children(hidden.into_iter().enumerate().map(|(ix, fname)| {
-                            let label = schema
-                                .as_ref()
-                                .and_then(|s| s.fields.get(&fname))
-                                .map(|e| format!("{} ({})", e.column_label, e.element))
-                                .unwrap_or_else(|| fname.clone());
-                            let span = schema
-                                .as_ref()
-                                .and_then(|s| s.fields.get(&fname))
-                                .map(|e| {
-                                    if e.field_type.prefers_full_width(&e.element, e.max_length) {
-                                        ColSpan::Two
-                                    } else {
-                                        ColSpan::One
-                                    }
-                                })
-                                .unwrap_or(ColSpan::One);
-                            let form_add = form_entity.clone();
-
-                            h_flex()
-                                .id(("add-hid-fld", ix))
-                                .px_3()
-                                .py_1p5()
-                                .justify_between()
-                                .items_center()
-                                .rounded(theme.radius)
-                                .hover(|s| s.bg(theme.accent))
-                                .child(div().text_xs().child(label))
-                                .child(
-                                    Button::new(("add-hid-btn", ix))
-                                        .secondary()
-                                        .xsmall()
-                                        .icon(IconName::Plus)
-                                        .label("Add")
-                                        .on_click(move |_, window, cx| {
-                                            form_add.update(cx, |f, cx| {
-                                                f.layout.show_field(&fname, span);
-                                                f.rebuild_field_controls(window, cx);
-                                                f.persist_layout();
-                                                cx.notify();
-                                            });
-                                        }),
-                                )
-                        }))
-                        .into_any_element()
-                })
+                .child(picker.clone())
         });
     }
 
-    fn toggle_favorite(&mut self, cx: &mut Context<Self>) {
-        let Some(sys_id) = self.session.sys_id.clone() else {
+    fn favorite_target(&self) -> Option<ClassicTarget> {
+        Some(ClassicTarget::Form {
+            table: self.session.table.clone(),
+            sys_id: self.session.sys_id.clone()?,
+            query: String::new(),
+            view: sn_core::classic::normalize_view(&self.view),
+        })
+    }
+
+    /// Re-reads whether this record is a favorite, after favorites or the view changed.
+    pub fn refresh_favorite_state(&mut self, cx: &mut Context<Self>) {
+        let favorited = self.favorite_target().is_some_and(|target| {
+            favorites::find(&self.services, &self.client.profile().id, &target).is_some()
+        });
+        if favorited != self.is_favorited {
+            self.is_favorited = favorited;
+            cx.notify();
+        }
+    }
+
+    /// Adds or removes this record from the user's ServiceNow favorites. The star updates
+    /// when the favorites tree reloads.
+    pub fn toggle_favorite(&mut self, _cx: &mut Context<Self>) {
+        let Some(target) = self.favorite_target() else {
             return;
         };
-        let inst_id = &self.client.profile().id;
-        let fav_id = format!("fav:rec:{}:{sys_id}", self.session.table);
-
-        if self.is_favorited {
-            let _ = self.services.cache.remove_favorite(inst_id, &fav_id);
-            self.is_favorited = false;
-        } else {
-            let item = FavoriteItem::for_record(
-                fav_id,
-                self.session.table.clone(),
-                sys_id,
-                self.session.baseline.primary_identifier(),
-                self.session.baseline.summary_text(),
-            );
-            let _ = self.services.cache.upsert_favorite(inst_id, &item);
-            self.is_favorited = true;
+        match favorites::find(&self.services, &self.client.profile().id, &target) {
+            Some(existing) => favorites::remove(&self.services, &self.client, existing),
+            None => {
+                let number = self.session.baseline.primary_identifier();
+                let title = match self.session.baseline.summary_text() {
+                    Some(summary) => {
+                        let summary: String = summary.chars().take(60).collect();
+                        format!("{number} · {summary}")
+                    }
+                    None => number,
+                };
+                favorites::add(&self.services, &self.client, title, target);
+            }
         }
-        self.services.send_cmd(WorkspaceCommand::RefreshSidebar);
-        cx.notify();
     }
 
     fn render_sticky_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1316,7 +1493,7 @@ impl FormViewPanel {
                                         .bg(bg)
                                         .border_1()
                                         .border_color(bdr)
-                                        .text_size(px(11.0))
+                                        .text_size(sp(11.0))
                                         .font_medium()
                                         .text_color(fg)
                                         .child(state_disp),
@@ -1332,7 +1509,7 @@ impl FormViewPanel {
                                         .bg(bg)
                                         .border_1()
                                         .border_color(bdr)
-                                        .text_size(px(11.0))
+                                        .text_size(sp(11.0))
                                         .font_medium()
                                         .text_color(fg)
                                         .child(prio_disp),
@@ -1345,7 +1522,7 @@ impl FormViewPanel {
                                         .py_0p5()
                                         .rounded_full()
                                         .bg(hsla(38. / 360., 0.90, 0.55, 0.16))
-                                        .text_size(px(11.0))
+                                        .text_size(sp(11.0))
                                         .font_medium()
                                         .text_color(rgb(0xFBBF24))
                                         .child(format!("● {dirty_count} unsaved")),
@@ -1358,16 +1535,19 @@ impl FormViewPanel {
                                         .py_0p5()
                                         .rounded_full()
                                         .bg(theme.danger.opacity(0.18))
-                                        .text_size(px(11.0))
+                                        .text_size(sp(11.0))
                                         .font_semibold()
                                         .text_color(theme.danger)
                                         .child(format!("⚠ {conflict_count} live conflict")),
                                 )
                             })
-                            .when_some(self.swr_hydrated_ms, |el, ms| {
+                            .when_some(
+                                self.swr_hydrated_ms
+                                    .filter(|_| AppPrefs::get(cx).show_perf_telemetry),
+                                |el, ms| {
                                 el.child(
                                     div()
-                                        .text_size(px(10.5))
+                                        .text_size(sp(10.5))
                                         .font_family(theme.mono_font_family.clone())
                                         .text_color(rgb(0x34D399))
                                         .child(format!("⚡ {:.2}ms", ms)),
@@ -1379,6 +1559,9 @@ impl FormViewPanel {
                         h_flex()
                             .gap_1p5()
                             .items_center()
+                            .child(Button::new("form-view").secondary().small()
+                                .label(format!("View: {}", if self.view.is_empty() { "Default" } else { &self.view }))
+                                .on_click(cx.listener(|this, _, window, cx| this.open_view_picker(window, cx))))
                             .when(is_demo && !self.session.is_new_record(), |el| {
                                 el.child(
                                     Button::new("demo-live-push-btn")
@@ -1399,7 +1582,18 @@ impl FormViewPanel {
                                     Button::new("fav-rec-btn")
                                         .ghost()
                                         .small()
-                                        .icon(IconName::Star)
+                                        .icon(Icon::new(IconName::Star).text_color(
+                                            if self.is_favorited {
+                                                rgb(0xFBBF24).into()
+                                            } else {
+                                                theme.muted_foreground
+                                            },
+                                        ))
+                                        .tooltip(if self.is_favorited {
+                                            "Remove from favorites"
+                                        } else {
+                                            "Add this record to favorites"
+                                        })
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.toggle_favorite(cx);
                                         })),
@@ -1528,7 +1722,7 @@ impl FormViewPanel {
                         .child(
                             div()
                                 .text_xs()
-                                .child("Drag cards by ⋮⋮ to rearrange, toggle 1-col / 2-col width, or hide/add dictionary fields. Saved automatically per table."),
+                                .child("Drag cards by ⋮⋮ to rearrange or search for fields. Customizations are saved per account, table and view."),
                         )
                         .child(
                             h_flex()
@@ -1536,7 +1730,7 @@ impl FormViewPanel {
                                 .items_center()
                                 .child(
                                     div()
-                                        .w(px(170.0))
+                                        .w(sp(170.0))
                                         .child(Input::new(&self.new_section_input).xsmall()),
                                 )
                                 .child(
@@ -1568,7 +1762,7 @@ impl FormViewPanel {
                                     Button::new("open-hidden-drawer-btn")
                                         .secondary()
                                         .xsmall()
-                                        .icon(IconName::Plus)
+                                        .icon(IconName::Search)
                                         .label(format!(
                                             "Add Field ({})",
                                             self.layout.hidden_fields.len()
@@ -1581,7 +1775,7 @@ impl FormViewPanel {
                                     Button::new("reset-auto-grid-btn")
                                         .ghost()
                                         .xsmall()
-                                        .label("Reset Auto-Grid")
+                                        .label("Reset to SN View")
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.reset_layout_to_default(cx);
                                         })),
@@ -1639,12 +1833,19 @@ impl FormViewPanel {
         let my_entity_id = cx.entity_id();
 
         let control_el = self.render_field_widget(element_name, read_only, cx);
+        let copy_field = element_name.to_string();
+        let compact = AppPrefs::get(cx).density == Density::Compact;
 
         v_flex()
             .id(("form-card", item_index))
             .w_full()
-            .p_2p5()
-            .gap_1p5()
+            .map(|card| {
+                if compact {
+                    card.px_2().py_1().gap_0p5()
+                } else {
+                    card.p_2p5().gap_1p5()
+                }
+            })
             .rounded(theme.radius)
             .bg(card_bg)
             .border_1()
@@ -1677,6 +1878,25 @@ impl FormViewPanel {
                         h_flex()
                             .gap_1p5()
                             .items_center()
+                            .child(
+                                Button::new(("copy-field", item_index))
+                                    .ghost()
+                                    .xsmall()
+                                    .icon(IconName::Copy)
+                                    .tooltip("Copy value (Option-click for raw value)")
+                                    .on_click(cx.listener(
+                                        move |this, event: &ClickEvent, _, cx| {
+                                            let value = if event.modifiers().alt {
+                                                this.session.effective_raw(&copy_field)
+                                            } else {
+                                                this.session.effective_display(&copy_field)
+                                            };
+                                            cx.write_to_clipboard(ClipboardItem::new_string(
+                                                value.to_string(),
+                                            ));
+                                        },
+                                    )),
+                            )
                             .when(self.customize_grid_mode, |el| {
                                 let drag_payload = DraggedGridField {
                                     form_entity_id: my_entity_id,
@@ -1718,7 +1938,7 @@ impl FormViewPanel {
                             .when(is_dirty, |el| {
                                 el.child(
                                     div()
-                                        .text_size(px(10.0))
+                                        .text_size(sp(10.0))
                                         .text_color(rgb(0xFBBF24))
                                         .child("edited"),
                                 )
@@ -1729,7 +1949,7 @@ impl FormViewPanel {
                                         .px_1p5()
                                         .rounded_full()
                                         .bg(hsla(152. / 360., 0.72, 0.48, 0.22))
-                                        .text_size(px(10.0))
+                                        .text_size(sp(10.0))
                                         .font_semibold()
                                         .text_color(rgb(0x34D399))
                                         .child("● Live update"),
@@ -1818,7 +2038,7 @@ impl FormViewPanel {
                         .border_color(theme.danger.opacity(0.4))
                         .child(
                             div()
-                                .text_size(px(11.0))
+                                .text_size(sp(11.0))
                                 .text_color(theme.foreground)
                                 .child(format!(
                                     "Server changed to \"{}\" ({who})",
@@ -1875,7 +2095,7 @@ impl FormViewPanel {
                 .readonly(read_only)
                 .into_any_element(),
             FieldWidgetControl::MultiLine(ta) => Textarea::new(ta)
-                .h(px(88.0))
+                .h(sp(88.0))
                 .readonly(read_only)
                 .into_any_element(),
             FieldWidgetControl::Choice { state } => Select::new(state)
@@ -1910,18 +2130,56 @@ impl FormViewPanel {
                 let fname_pick = field_name.to_string();
                 let fname_clr = field_name.to_string();
                 let target_pick = target_table.clone();
-                let target_jump = target_table.clone();
-                let raw_jump = raw_id.clone();
+                let linkable = is_single_reference(&raw_id) && !disp.is_empty();
 
+                // The value links to its record; the rest of the box opens the picker.
+                let value_el = if linkable {
+                    h_flex()
+                        .flex_1()
+                        .min_w_0()
+                        .child(reference_link(
+                            SharedString::from(format!("ref-link-{field_name}")),
+                            &self.services,
+                            &self.client,
+                            target_table,
+                            &raw_id,
+                            &disp,
+                            true,
+                            cx,
+                        ))
+                        .into_any_element()
+                } else {
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .text_xs()
+                        .truncate()
+                        .text_color(if disp.is_empty() {
+                            theme.muted_foreground
+                        } else {
+                            theme.foreground
+                        })
+                        .child(if disp.is_empty() {
+                            format!("Select {target_table}…")
+                        } else {
+                            disp
+                        })
+                        .into_any_element()
+                };
+
+                let picker_selector = format!("ref-pick:{field_name}");
                 h_flex()
                     .gap_1p5()
                     .items_center()
                     .child(
                         h_flex()
                             .id(SharedString::from(format!("ref-trig-{field_name}")))
+                            .debug_selector(move || picker_selector)
                             .flex_1()
-                            .h(px(28.0))
+                            .min_w_0()
+                            .h(sp(28.0))
                             .px_2p5()
+                            .gap_2()
                             .justify_between()
                             .items_center()
                             .rounded(theme.radius)
@@ -1940,26 +2198,14 @@ impl FormViewPanel {
                                         );
                                     }))
                             })
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .truncate()
-                                    .text_color(if disp.is_empty() {
-                                        theme.muted_foreground
-                                    } else {
-                                        theme.foreground
-                                    })
-                                    .child(if disp.is_empty() {
-                                        format!("Select {target_table}…")
-                                    } else {
-                                        disp
-                                    }),
-                            )
-                            .child(
-                                Icon::new(IconName::Search)
-                                    .xsmall()
-                                    .text_color(theme.muted_foreground),
-                            ),
+                            .child(value_el)
+                            .when(!read_only, |el| {
+                                el.child(
+                                    Icon::new(IconName::Search)
+                                        .xsmall()
+                                        .text_color(theme.muted_foreground),
+                                )
+                            }),
                     )
                     .when(!raw_id.is_empty() && !read_only, |el| {
                         el.child(
@@ -1967,26 +2213,11 @@ impl FormViewPanel {
                                 .ghost()
                                 .xsmall()
                                 .icon(IconName::X)
+                                .tooltip("Clear")
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     this.session
                                         .edit_field(fname_clr.clone(), FieldValue::default());
                                     cx.notify();
-                                })),
-                        )
-                    })
-                    .when(!raw_id.is_empty(), |el| {
-                        el.child(
-                            Button::new(SharedString::from(format!("ref-jmp-{field_name}")))
-                                .secondary()
-                                .xsmall()
-                                .icon(IconName::ArrowUpRight)
-                                .on_click(cx.listener(move |this, _, _, _| {
-                                    this.services.send_cmd(WorkspaceCommand::OpenRecord {
-                                        table: target_jump.clone(),
-                                        sys_id: raw_jump.clone(),
-                                        seed_record: None,
-                                        in_split: true,
-                                    });
                                 })),
                         )
                     })
@@ -2027,7 +2258,7 @@ impl FormViewPanel {
                                     .py_0p5()
                                     .rounded_full()
                                     .bg(theme.secondary)
-                                    .text_size(px(10.5))
+                                    .text_size(sp(10.5))
                                     .text_color(theme.muted_foreground)
                                     .child(format!("{} entries", self.session.journals.len())),
                             ),
@@ -2072,14 +2303,14 @@ impl FormViewPanel {
                     .rounded(theme.radius)
                     .border_l_2()
                     .border_color(rgb(0xFBBF24))
-                    .child(Textarea::new(&self.work_notes_input).h(px(74.0)))
+                    .child(Textarea::new(&self.work_notes_input).h(sp(74.0)))
             } else {
                 div()
                     .p_1()
                     .rounded(theme.radius)
                     .border_l_2()
                     .border_color(rgb(0x38BDF8))
-                    .child(Textarea::new(&self.comments_input).h(px(74.0)))
+                    .child(Textarea::new(&self.comments_input).h(sp(74.0)))
             })
             // Chronological Live Timeline
             .children(self.session.journals.iter().map(|j| {
@@ -2116,7 +2347,7 @@ impl FormViewPanel {
                                             .px_1p5()
                                             .rounded(px(3.0))
                                             .bg(accent.opacity(0.16))
-                                            .text_size(px(10.0))
+                                            .text_size(sp(10.0))
                                             .text_color(accent)
                                             .child(if j.is_work_note() {
                                                 "Work note"
@@ -2127,7 +2358,7 @@ impl FormViewPanel {
                             )
                             .child(
                                 div()
-                                    .text_size(px(11.0))
+                                    .text_size(sp(11.0))
                                     .font_family(theme.mono_font_family.clone())
                                     .text_color(theme.muted_foreground)
                                     .child(j.sys_created_on.clone()),
@@ -2144,6 +2375,7 @@ impl Render for FormViewPanel {
         let visual_rows = self.layout.compute_visual_rows();
         let has_journals =
             !self.layout.journal_fields.is_empty() || !self.session.journals.is_empty();
+        let compact = AppPrefs::get(cx).density == Density::Compact;
 
         v_flex()
             .size_full()
@@ -2156,7 +2388,13 @@ impl Render for FormViewPanel {
                     .overflow_y_scroll()
                     .px_5()
                     .py_4()
-                    .gap_3()
+                    .map(|grid| {
+                        if compact {
+                            grid.gap_1p5()
+                        } else {
+                            grid.gap_3()
+                        }
+                    })
                     // Packed 2-Column Rearrangeable Auto-Grid
                     .children(visual_rows.into_iter().map(|row| {
                         match row {
@@ -2232,7 +2470,7 @@ impl Render for FormViewPanel {
                                     .unwrap_or_else(|| div().w_full().into_any_element());
                                 h_flex()
                                     .w_full()
-                                    .gap_3()
+                                    .map(|row| if compact { row.gap_1p5() } else { row.gap_3() })
                                     .items_start()
                                     .child(div().flex_1().min_w_0().child(left_el))
                                     .child(div().flex_1().min_w_0().child(right_el))
@@ -2276,7 +2514,7 @@ impl Render for FormViewPanel {
                                         }))
                                         .child(
                                             div()
-                                                .text_size(px(11.0))
+                                                .text_size(sp(11.0))
                                                 .font_medium()
                                                 .text_color(theme.muted_foreground)
                                                 .child("System Audit Metadata"),
@@ -2296,19 +2534,40 @@ impl Render for FormViewPanel {
                                         h_flex()
                                             .flex_wrap()
                                             .gap_4()
-                                            .text_size(px(11.0))
+                                            .text_size(sp(11.0))
                                             .font_family(theme.mono_font_family.clone())
                                             .text_color(theme.muted_foreground)
-                                            .child(format!("sys_id: {sys_id}"))
-                                            .child(format!("mod_count: {mod_count}"))
-                                            .when(!updated_on.is_empty(), |m| {
-                                                m.child(format!(
-                                                    "updated: {updated_on} ({updated_by})"
-                                                ))
-                                            })
-                                            .when(!created_on.is_empty(), |m| {
-                                                m.child(format!("created: {created_on}"))
-                                            }),
+                                            .children(
+                                                [
+                                                    ("sys_id", sys_id),
+                                                    ("updates", mod_count.to_string()),
+                                                    ("updated", updated_on),
+                                                    ("updated by", updated_by),
+                                                    ("created", created_on),
+                                                    (
+                                                        "created by",
+                                                        self.session
+                                                            .effective_display("sys_created_by")
+                                                            .to_string(),
+                                                    ),
+                                                ]
+                                                .into_iter()
+                                                .enumerate()
+                                                .map(|(ix, (name, value))| {
+                                                    Button::new(("copy-audit", ix))
+                                                        .ghost()
+                                                        .xsmall()
+                                                        .label(format!("{name}: {value}"))
+                                                        .icon(IconName::Copy)
+                                                        .on_click(move |_, _, cx| {
+                                                            cx.write_to_clipboard(
+                                                                ClipboardItem::new_string(
+                                                                    value.clone(),
+                                                                ),
+                                                            )
+                                                        })
+                                                }),
+                                            ),
                                     )
                                 }),
                         )

@@ -7,6 +7,8 @@ use gpui_kit::component::theme::ActiveTheme as _;
 use gpui_kit::component::{Icon, Sizable as _, StyledExt as _, WindowExt as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
+
+use crate::theme::sp;
 use sn_core::InstanceId;
 
 use crate::actions::{ToggleCustomizeGrid, ToggleSplitPane, ToggleThemeMode};
@@ -244,7 +246,7 @@ impl CommandPaletteView {
                 IconName::Server,
                 "Switch or Connect ServiceNow Instance",
                 "Manage OAuth 2.0 PKCE profiles, Keychain tokens, or Demo Sandbox",
-                Some("⌘,"),
+                Some("⇧⌘,"),
                 PaletteAction::SwitchInstancesModal,
             ),
         ];
@@ -366,7 +368,7 @@ impl Render for CommandPaletteView {
             .child(
                 v_flex()
                     .id("palette-results-scroll")
-                    .max_h(px(360.0))
+                    .max_h(sp(360.0))
                     .overflow_y_scroll()
                     .gap_1()
                     .children(self.entries.iter().cloned().enumerate().map(|(ix, entry)| {
@@ -427,7 +429,7 @@ impl Render for CommandPaletteView {
                                         .py_0p5()
                                         .rounded(px(4.0))
                                         .bg(theme.secondary)
-                                        .text_size(px(10.5))
+                                        .text_size(sp(10.5))
                                         .text_color(theme.muted_foreground)
                                         .child(hint),
                                 )

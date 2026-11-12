@@ -173,6 +173,143 @@ fn sn_cache_is_clone_send_sync() {
 }
 
 #[test]
+fn same_instance_accounts_isolate_records_views_columns_and_navigation_after_reopen() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("accounts.db");
+    let cache = SnCache::open_path(&path).unwrap();
+    let mut a = InstanceProfile::new("Development", "example", "client", false).unwrap();
+    let mut b = InstanceProfile::new("Development", "example", "client", false).unwrap();
+    a.account = Some(sn_core::AccountIdentity {
+        sys_id: "a".into(),
+        user_name: "alice".into(),
+        display_name: "Alice".into(),
+    });
+    b.account = Some(sn_core::AccountIdentity {
+        sys_id: "b".into(),
+        user_name: "bob".into(),
+        display_name: "Bob".into(),
+    });
+    let mut layout = FormGridLayout::generate_smart_default(&sample_incident_schema());
+    layout.hide_field("description");
+    for (profile, value) in [(&a, "Alice only"), (&b, "Bob only")] {
+        cache.upsert_instance(profile).unwrap();
+        let record = make_record(
+            "incident",
+            "shared-id",
+            &[("short_description", value, value)],
+            "2026-01-01 00:00:00",
+            1,
+            false,
+        );
+        cache.upsert_record(&profile.id, &record).unwrap();
+        cache
+            .save_account_metadata(&profile.id, "navigation", &vec![value])
+            .unwrap();
+    }
+    cache
+        .save_form_layout_for_view(&a.id, &layout, "ess")
+        .unwrap();
+    cache
+        .save_list_columns(&a.id, "incident@ess", &["sys_created_by".into()])
+        .unwrap();
+    drop(cache);
+
+    let cache = SnCache::open_path(&path).unwrap();
+    assert_eq!(cache.list_instances().unwrap(), vec![a.clone(), b.clone()]);
+    assert_eq!(
+        cache
+            .get_record(&a.id, "incident", "shared-id")
+            .unwrap()
+            .unwrap()
+            .data
+            .get_raw("short_description"),
+        "Alice only"
+    );
+    assert_eq!(
+        cache
+            .get_record(&b.id, "incident", "shared-id")
+            .unwrap()
+            .unwrap()
+            .data
+            .get_raw("short_description"),
+        "Bob only"
+    );
+    assert!(cache.get_form_layout(&a.id, "incident").unwrap().is_none());
+    assert!(
+        cache
+            .get_form_layout(&b.id, "incident@ess")
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        cache
+            .get_form_layout(&a.id, "incident@ess")
+            .unwrap()
+            .unwrap()
+            .table,
+        "incident"
+    );
+    assert!(
+        cache
+            .get_list_columns(&b.id, "incident@ess")
+            .unwrap()
+            .is_none()
+    );
+    cache.delete_list_columns(&a.id, "incident@ess").unwrap();
+    assert!(
+        cache
+            .get_list_columns(&a.id, "incident@ess")
+            .unwrap()
+            .is_none()
+    );
+    cache.delete_instance(&a.id).unwrap();
+    assert!(
+        cache
+            .get_account_metadata::<Vec<String>>(&a.id, "navigation")
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        cache
+            .get_account_metadata::<Vec<String>>(&b.id, "navigation")
+            .unwrap()
+            .unwrap(),
+        ["Bob only"]
+    );
+}
+
+#[test]
+fn legacy_database_migration_preserves_profiles_and_accepts_account_identity() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("legacy.db");
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE instances (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, base_url TEXT NOT NULL,
+        client_id TEXT NOT NULL, has_client_secret INTEGER NOT NULL,
+        callback_port INTEGER NOT NULL, scopes TEXT NOT NULL, accent_hex TEXT NOT NULL,
+        created_at TEXT NOT NULL, last_connected_at TEXT);
+        INSERT INTO instances VALUES ('legacy','Development','https://example.service-now.com',
+        'client',0,8910,'useraccount','#38BDF8','2026-01-01T00:00:00Z',NULL);",
+    )
+    .unwrap();
+    drop(conn);
+    let cache = SnCache::open_path(&path).unwrap();
+    let mut profile = cache.list_instances().unwrap().remove(0);
+    assert_eq!(profile.id.as_str(), "legacy");
+    assert!(profile.account.is_none());
+    profile.account = Some(sn_core::AccountIdentity {
+        sys_id: "a".into(),
+        user_name: "alice".into(),
+        display_name: "Alice".into(),
+    });
+    cache.upsert_instance(&profile).unwrap();
+    drop(cache);
+    let cache = SnCache::open_path(path).unwrap();
+    assert_eq!(cache.list_instances().unwrap(), [profile]);
+}
+
+#[test]
 fn partial_list_to_full_form_to_partial_refresh_preserves_full_fields() {
     let cache = SnCache::open_in_memory().expect("in-memory cache");
     let inst = InstanceId::from("dev-instance");
@@ -793,4 +930,34 @@ async fn async_spawn_blocking_helpers_round_trip() {
         .unwrap()
         .expect("async record");
     assert_eq!(fetched_rec.data.primary_identifier(), "INC999001");
+}
+
+#[test]
+fn application_settings_round_trip_and_survive_reopen() {
+    #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+    struct Prefs {
+        ui_scale: f32,
+        appearance: String,
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let db_file = dir.path().join("settings.db");
+    let prefs = Prefs {
+        ui_scale: 1.2,
+        appearance: "light".into(),
+    };
+    {
+        let cache = SnCache::open_path(&db_file).unwrap();
+        assert!(cache.get_setting::<Prefs>("preferences").unwrap().is_none());
+        cache.set_setting("preferences", &prefs).unwrap();
+        // Overwrites rather than duplicating the key.
+        cache.set_setting("preferences", &prefs).unwrap();
+    }
+    let reopened = SnCache::open_path(&db_file).unwrap();
+    assert_eq!(
+        reopened.get_setting::<Prefs>("preferences").unwrap(),
+        Some(prefs)
+    );
+    // Settings live beside, not instead of, the active-instance pointer.
+    assert!(reopened.get_active_instance_id().unwrap().is_none());
 }

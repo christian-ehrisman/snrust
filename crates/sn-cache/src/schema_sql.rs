@@ -35,12 +35,20 @@ pub(crate) fn initialize_database(conn: &Connection) -> SnResult<()> {
             scopes TEXT NOT NULL,
             accent_hex TEXT NOT NULL,
             created_at TEXT NOT NULL,
-            last_connected_at TEXT
+            last_connected_at TEXT,
+            account_json TEXT
         );
 
         CREATE TABLE IF NOT EXISTS workspace_kv (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS account_metadata (
+            instance_id TEXT NOT NULL,
+            key TEXT NOT NULL,
+            value_json TEXT NOT NULL,
+            PRIMARY KEY (instance_id, key)
         );
 
         CREATE TABLE IF NOT EXISTS favorites (
@@ -183,6 +191,23 @@ pub(crate) fn initialize_database(conn: &Connection) -> SnResult<()> {
         ",
     )
     .map_err(cache_err)?;
+
+    let has_account: bool = conn
+        .prepare("PRAGMA table_info(instances)")
+        .map_err(cache_err)?
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(cache_err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(cache_err)?
+        .iter()
+        .any(|name| name == "account_json");
+    if !has_account {
+        conn.execute("ALTER TABLE instances ADD COLUMN account_json TEXT", [])
+            .map_err(cache_err)?;
+        // Older schemas omitted global audit fields and could use a truncated parent catalog.
+        conn.execute("DELETE FROM table_schemas", [])
+            .map_err(cache_err)?;
+    }
 
     Ok(())
 }

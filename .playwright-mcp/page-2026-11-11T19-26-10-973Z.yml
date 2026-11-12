@@ -1,0 +1,350 @@
+- generic [ref=e1]:
+  - generic [ref=e8]:
+    - generic [ref=e9]:
+      - text: We use cookies on this site to improve your browsing experience, analyze individualized usage and website traffic, tailor content to your preferences, and make your interactions with our website more meaningful. To learn more about the cookies we use and how you can change your preferences, please read our
+      - link "Cookie Policy" [ref=e10] [cursor=pointer]:
+        - /url: //www.servicenow.com/cookie-policy.html
+      - text: and visit our
+      - link "Cookie Preference Manager" [ref=e11] [cursor=pointer]
+      - text: . By clicking “Accept and Proceed,” closing this banner or continuing to browse this site, you consent to the use of cookies.
+    - button "Accept and Proceed" [ref=e13] [cursor=pointer]
+  - generic [ref=e14]:
+    - button "Skip to main content" [ref=e15] [cursor=pointer]
+    - banner [ref=e16]:
+      - banner [ref=e17]:
+        - generic [ref=e19]:
+          - link [ref=e21] [cursor=pointer]:
+            - /url: https://www.servicenow.com/
+            - img "ServiceNow" [ref=e22]
+          - navigation [ref=e23]:
+            - navigation [ref=e25]:
+              - button "Products" [ref=e26] [cursor=pointer]
+              - button "Industries" [ref=e27] [cursor=pointer]
+              - button "Learning" [ref=e28] [cursor=pointer]
+              - button "Support" [ref=e29] [cursor=pointer]
+              - button "Partners" [ref=e30] [cursor=pointer]
+              - button "Company" [ref=e31] [cursor=pointer]
+          - generic [ref=e32]:
+            - button "Select your country" [ref=e34] [cursor=pointer]:
+              - img "Select your country" [ref=e35]
+            - link "Get Started" [ref=e37] [cursor=pointer]:
+              - /url: https://www.servicenow.com/contact-us.html
+      - generic [ref=e39]:
+        - generic [ref=e45]:
+          - img "info-icon" [ref=e47]
+          - generic [ref=e48]:
+            - text: We've upgraded how our search works to help you find what you need faster. Read more about recent changes to this site in the
+            - link "documentation site release notes" [ref=e49] [cursor=pointer]:
+              - /url: https://www.servicenow.com/docs/r/using-this-site/explore-doc-site.html
+            - text: .
+          - button "Close message" [ref=e50] [cursor=pointer]:
+            - img "close-button" [ref=e51]
+        - generic [ref=e52]:
+          - generic [ref=e57]:
+            - link "Documentation" [ref=e58] [cursor=pointer]:
+              - /url: https://www.servicenow.com/docs/home
+            - link "Product directory" [ref=e61] [cursor=pointer]:
+              - /url: https://www.servicenow.com/docs/p/product-directory/product-directory.html
+            - link "Release notes" [ref=e64] [cursor=pointer]:
+              - /url: https://www.servicenow.com/docs/r/release-notes/family-release-notes.html
+            - link "PDF library" [ref=e67] [cursor=pointer]:
+              - /url: https://www.servicenow.com/docs/r/pdf-archive/pdf-archive.html
+            - link "APIs" [ref=e70] [cursor=pointer]:
+              - /url: https://www.servicenow.com/docs/r/api-reference/api-implementation-reference.html
+            - link "Accessibility" [ref=e73] [cursor=pointer]:
+              - /url: https://www.servicenow.com/docs/r/accessibility/product_accessibility.html
+            - link "GitHub" [ref=e77] [cursor=pointer]:
+              - /url: https://github.com/ServiceNow/ServiceNowDocs
+          - button "Sign in" [ref=e86] [cursor=pointer]
+    - generic [ref=e92]:
+      - generic [ref=e99]:
+        - generic [ref=e101]:
+          - link "Secure your instance pdf" [ref=e105] [cursor=pointer]:
+            - /url: https://downloads.docs.servicenow.com/pdf/enus/servicenow-zurich-platform-security-enus.pdf
+            - generic [ref=e107]: 
+            - generic [ref=e108]: Secure your instance
+          - generic [ref=e114]:
+            - button "Expand all table of contents" [ref=e117]:
+              - generic [ref=e118]: Expand all
+            - tree "API access policy" [ref=e703]:
+              - treeitem "Secure your instance" [ref=e122] [cursor=pointer]
+              - treeitem "ServiceNow Vault" [ref=e127] [cursor=pointer]:
+                - generic [ref=e128]: 
+              - treeitem "Now Assist for Vault" [ref=e133] [cursor=pointer]:
+                - generic [ref=e134]: 
+              - treeitem "Platform Security" [ref=e139] [cursor=pointer]:
+                - generic [ref=e140]: 
+              - treeitem "Antivirus Scanning" [ref=e145] [cursor=pointer]:
+                - generic [ref=e146]: 
+              - treeitem "HTML sanitizer" [ref=e151] [cursor=pointer]:
+                - generic [ref=e152]: 
+              - treeitem "Auditing" [ref=e157] [cursor=pointer]:
+                - generic [ref=e158]: 
+              - treeitem "High Security Settings" [ref=e163] [cursor=pointer]:
+                - generic [ref=e164]: 
+              - treeitem "Virtual Private Network (VPN)" [ref=e169] [cursor=pointer]:
+                - generic [ref=e170]: 
+              - treeitem "Platform Privacy" [ref=e175] [cursor=pointer]:
+                - generic [ref=e176]: 
+              - treeitem "Encryption" [ref=e181] [cursor=pointer]:
+                - generic [ref=e182]: 
+              - generic [ref=e186]:
+                - treeitem "Access Management" [expanded] [ref=e187] [cursor=pointer]:
+                  - generic [ref=e188]: 
+                - group [ref=e192]:
+                  - treeitem "Zero Trust Access" [ref=e194] [cursor=pointer]:
+                    - generic [ref=e195]: 
+                  - treeitem "Domain separation for service providers" [ref=e200] [cursor=pointer]:
+                    - generic [ref=e201]: 
+                  - treeitem "Authentication" [ref=e206] [cursor=pointer]:
+                    - generic [ref=e207]: 
+                  - generic [ref=e211]:
+                    - treeitem "API access policy" [expanded] [ref=e212] [cursor=pointer]:
+                      - generic [ref=e213]: 
+                    - group [ref=e704]:
+                      - treeitem "REST API access policies" [ref=e706] [cursor=pointer]:
+                        - generic [ref=e707]: 
+                      - treeitem "SOAP API access policies" [ref=e712] [cursor=pointer]:
+                        - generic [ref=e713]: 
+                      - treeitem "API Authentication Policies" [ref=e718] [cursor=pointer]:
+                        - generic [ref=e719]: 
+                      - treeitem "System or Export Processors" [ref=e724] [cursor=pointer]:
+                        - generic [ref=e725]: 
+                  - treeitem "Authentication factors" [ref=e218] [cursor=pointer]:
+                    - generic [ref=e219]: 
+                  - treeitem "Certificate-based authentication" [ref=e224] [cursor=pointer]:
+                    - generic [ref=e225]: 
+                  - treeitem "Custom instance URLs" [ref=e230] [cursor=pointer]:
+                    - generic [ref=e231]: 
+                  - treeitem "Installation exits" [ref=e236] [cursor=pointer]
+                  - treeitem "IP range based authentication" [ref=e241] [cursor=pointer]:
+                    - generic [ref=e242]: 
+                  - treeitem "LDAP integration" [ref=e247] [cursor=pointer]:
+                    - generic [ref=e248]: 
+                  - treeitem "Limit concurrent sessions" [ref=e253] [cursor=pointer]:
+                    - generic [ref=e254]: 
+                  - treeitem "Local authentication" [ref=e259] [cursor=pointer]:
+                    - generic [ref=e260]: 
+                  - treeitem "Multi-factor authentication" [ref=e265] [cursor=pointer]:
+                    - generic [ref=e266]: 
+                  - treeitem "Multi-Provider single sign-on (SSO)" [ref=e271] [cursor=pointer]:
+                    - generic [ref=e272]: 
+                  - treeitem "OAuth authentication" [ref=e277] [cursor=pointer]:
+                    - generic [ref=e278]: 
+                  - treeitem "Personal authentication" [ref=e323] [cursor=pointer]:
+                    - generic [ref=e324]: 
+                  - treeitem "Self-register to ServiceNow instance" [ref=e329] [cursor=pointer]:
+                    - generic [ref=e330]: 
+                  - treeitem "Token based authentication (User logins)" [ref=e335] [cursor=pointer]:
+                    - generic [ref=e336]: 
+                  - treeitem "Web service security" [ref=e341] [cursor=pointer]:
+                    - generic [ref=e342]: 
+                  - treeitem "Access Control List Rules" [ref=e347] [cursor=pointer]:
+                    - generic [ref=e348]: 
+                  - treeitem "Access analyzer" [ref=e353] [cursor=pointer]:
+                    - generic [ref=e354]: 
+                  - treeitem "Security Attributes" [ref=e359] [cursor=pointer]:
+                    - generic [ref=e360]: 
+                  - treeitem "Field Query Roles and Restrictions" [ref=e365] [cursor=pointer]:
+                    - generic [ref=e366]: 
+                  - treeitem "Scripting Governance Tool" [ref=e371] [cursor=pointer]:
+                    - generic [ref=e372]: 
+                  - treeitem "Machine identity access controls" [ref=e377] [cursor=pointer]:
+                    - generic [ref=e378]: 
+                  - treeitem "Data filtration" [ref=e383] [cursor=pointer]:
+                    - generic [ref=e384]: 
+                  - treeitem "Security data filters" [ref=e389] [cursor=pointer]:
+                    - generic [ref=e390]: 
+                  - treeitem "Security Roles" [ref=e395] [cursor=pointer]:
+                    - generic [ref=e396]: 
+                  - treeitem "Connections and Credentials" [ref=e401] [cursor=pointer]:
+                    - generic [ref=e402]: 
+                  - treeitem "ServiceNow access control" [ref=e407] [cursor=pointer]:
+                    - generic [ref=e408]: 
+              - treeitem "Identity" [ref=e413] [cursor=pointer]:
+                - generic [ref=e414]: 
+              - treeitem "Access observer" [ref=e419] [cursor=pointer]:
+                - generic [ref=e420]: 
+              - treeitem "Granular Admin Roles" [ref=e425] [cursor=pointer]
+              - treeitem "Additional resources" [ref=e430] [cursor=pointer]
+              - treeitem "Virtual infrastructure security" [ref=e435] [cursor=pointer]
+              - treeitem "Operating system security" [ref=e440] [cursor=pointer]
+              - treeitem "Network security" [ref=e445] [cursor=pointer]
+        - generic [ref=e449]:
+          - generic [ref=e450]:
+            - generic [ref=e451]:
+              - generic [ref=e730]:
+                - link "Home" [ref=e731] [cursor=pointer]
+                - generic [ref=e733]: ">"
+                - link "Access Management" [ref=e734] [cursor=pointer]:
+                  - /url: https://www.servicenow.com/docs/r/zurich/platform-security/access-management-landing.html
+                - generic [ref=e735]: ">"
+                - generic [ref=e736]: API access policy
+              - heading "API access policy" [level=1] [ref=e737]
+              - generic [ref=e470]:
+                - generic [ref=e475]:
+                  - generic [ref=e476]: Release version
+                  - generic [ref=e480]:
+                    - generic:
+                      - 'generic "Release: zurich" [ref=e483] [cursor=pointer]':
+                        - generic [ref=e484]: zurich
+                        - generic [ref=e487]: 
+                      - generic: Release
+                      - generic: australia
+                      - generic: brazil
+                      - generic: xanadu
+                      - generic: yokohama
+                - generic:
+                  - generic: ft:locale
+                  - generic: pt-BR
+                  - generic: de-DE
+                  - generic: ko-KR
+                  - generic: ja-JP
+                  - generic: fr-FR
+                - generic [ref=e490]:
+                  - generic [ref=e496]:
+                    - img "copy" [ref=e739]
+                    - generic [ref=e740]:
+                      - generic [ref=e741]: Link copied to clipboard
+                      - button "✖" [ref=e743] [cursor=pointer]
+                  - generic [ref=e508]:
+                    - button [ref=e744] [cursor=pointer]:
+                      - img "Copy Markdown URL" [ref=e745]
+                    - generic:
+                      - button "✖"
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic: "Yes"
+                          - generic: "No"
+                        - generic: Submit
+            - search [ref=e515]:
+              - combobox "What would you like to know?" [ref=e518]
+              - link "Search" [ref=e524] [cursor=pointer]:
+                - /url: https://www.servicenow.com/docs/search?content-lang=en-US&negative-value-filters=ft%253ApublicationId~%2522oJu9n0q6rU%255C%255C~F9UHAnNCt5w%2522
+                - generic [ref=e526]: 
+          - main
+          - article [ref=e748]:
+            - generic [ref=e749]:
+              - main [ref=e754]:
+                - article "API access policy" [ref=e755]:
+                  - generic [ref=e756]:
+                    - generic [ref=e757]: Updated July 31, 2025
+                    - generic [ref=e758]: 1 minute to read
+                  - generic [ref=e760]:
+                    - paragraph [ref=e761]: API access policy defines the permissions and duration of access to an API.
+                    - paragraph [ref=e762]: API access policy enables you to restrict access to inbound ServiceNow® APIs based on the authentication type and the specified filter criteria of the access policy.
+                    - paragraph [ref=e763]: "Following are the three level auth policy support for the non-interactive sessions:"
+                    - list [ref=e764]:
+                      - listitem [ref=e765]: "REST API: Admin can define a global API auth policy or API specific auth policy."
+                      - listitem [ref=e766]: "SOAP API: Admin can define a global API auth policy or API specific auth policy."
+                      - listitem [ref=e767]: "System/Export Processor: Admin can define five base system auth profiles, which can be used to apply auth profile to processors API auth policy or processor specific auth policy."
+                    - generic [ref=e768]: "Note: If you add a global auth policy, then the policy applies for all the REST APIs, SOAP APIs, or System/Export Processors."
+                    - paragraph [ref=e769]: "Following are the plugins auto-installed for API policies and authentication scope:"
+                    - list [ref=e770]:
+                      - listitem [ref=e771]: com.glide.rest.policy
+                      - listitem [ref=e772]: com.glide.soap.policy
+                      - listitem [ref=e773]: com.glide.processor.policy
+                      - listitem [ref=e774]: com.glide.rest.auth.scope
+                    - paragraph [ref=e775]: You can configure the default Global Blocking Policy or create a custom API access policy according to your security requirements. And apply filter criteria that contain filter conditions or queries that are used as policy inputs for an authentication policy.
+                    - paragraph [ref=e776]: "The following API access policies are supported in ServiceNow®:"
+                    - list [ref=e777]:
+                      - listitem [ref=e778]:
+                        - link "REST API access policies" [ref=e779] [cursor=pointer]:
+                          - /url: https://www.servicenow.com/docs/r/oJu9n0q6rU~F9UHAnNCt5w/O0QTz0A9jJ3ZJh5DB~6xEw
+                      - listitem [ref=e780]:
+                        - link "SOAP API access policies" [ref=e781] [cursor=pointer]:
+                          - /url: https://www.servicenow.com/docs/r/oJu9n0q6rU~F9UHAnNCt5w/x~Q9wqNhGpi4eNBp4x3ZFA
+                    - paragraph [ref=e782]:
+                      - text: For information about policies related to export processors, see
+                      - link "Access policy for System or Export Processors" [ref=e783] [cursor=pointer]:
+                        - /url: https://www.servicenow.com/docs/r/oJu9n0q6rU~F9UHAnNCt5w/hhQ~IRhu5Wl1n2w7ItWGSw
+                      - text: .
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - button "Open"
+                  - generic:
+                    - generic: Send feedback
+                    - generic: Rate this content
+                    - generic:
+                      - generic: "Yes"
+                      - generic: "No"
+                    - generic: Not rated
+                    - generic: Write your review
+                    - generic: Submit
+              - generic [ref=e785]:
+                - generic [ref=e786]: Was this topic helpful?
+                - generic [ref=e789]:
+                  - button "Provide feedback" [ref=e791] [cursor=pointer]
+                  - generic:
+                    - generic: Rate this content
+                    - generic:
+                      - generic: "Yes"
+                      - generic: "No"
+                    - generic: Not rated
+                    - generic: Write your review
+                    - generic: Submit
+              - generic [ref=e797]:
+                - 'link "Previous section: Basic authentication exceptions" [ref=e802] [cursor=pointer]':
+                  - /url: https://www.servicenow.com/docs/r/zurich/platform-security/authentication/basic-auth-exceptions-d31197e36142.html
+                  - generic: 
+                - 'link "Next section: REST API access policies" [ref=e811] [cursor=pointer]':
+                  - /url: https://www.servicenow.com/docs/r/zurich/platform-security/authentication/inbound-authentication-profile-d31197e36220.html
+                  - generic: 
+      - contentinfo [ref=e654]:
+        - generic [ref=e655]:
+          - generic [ref=e656]:
+            - heading [level=3] [ref=e658]:
+              - img "ServiceNow" [ref=e659]
+              - generic [ref=e660]:
+                - text: The world works with ServiceNow
+                - superscript [ref=e661]: ™
+            - generic [ref=e662]:
+              - link "Twitter" [ref=e663] [cursor=pointer]:
+                - /url: https://twitter.com/servicenow
+              - link "YouTube" [ref=e665] [cursor=pointer]:
+                - /url: https://www.youtube.com/user/servicenowinc
+              - link "Linkedin" [ref=e667] [cursor=pointer]:
+                - /url: https://www.linkedin.com/company/servicenow
+              - link "Facebook" [ref=e669] [cursor=pointer]:
+                - /url: https://www.facebook.com/servicenow
+              - link "Instagram" [ref=e671] [cursor=pointer]:
+                - /url: https://www.instagram.com/servicenow/
+              - link "TikTok" [ref=e673] [cursor=pointer]:
+                - /url: https://www.tiktok.com/@servicenow
+          - list [ref=e676]:
+            - listitem [ref=e677]:
+              - button "Select your country" [ref=e679] [cursor=pointer]: United States - Global
+            - listitem [ref=e682]:
+              - link "Site terms" [ref=e683] [cursor=pointer]:
+                - /url: https://www.servicenow.com/terms-of-use.html
+            - listitem [ref=e684]:
+              - link "GDPR" [ref=e685] [cursor=pointer]:
+                - /url: https://www.servicenow.com/company/trust/privacy/gdpr.html
+            - listitem [ref=e686]:
+              - link "Privacy statement" [ref=e687] [cursor=pointer]:
+                - /url: https://www.servicenow.com/privacy-statement.html
+            - listitem [ref=e688]:
+              - link "Your privacy choices" [ref=e689] [cursor=pointer]:
+                - /url: https://www.servicenow.com/privacy-preferences.html
+            - listitem [ref=e690]:
+              - link "Cookie policy" [ref=e691] [cursor=pointer]:
+                - /url: https://www.servicenow.com/cookie-policy.html
+            - listitem [ref=e692]:
+              - link "Cookie preferences" [ref=e693] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e694]:
+              - link "Sitemap" [ref=e695] [cursor=pointer]:
+                - /url: https://www.servicenow.com/sitemap.html
+            - listitem [ref=e696]:
+              - link "Business continuity" [ref=e697] [cursor=pointer]:
+                - /url: https://www.servicenow.com/content/dam/servicenow-assets/public/en-us/doc-type/public-document/servicenow-business-continuity-faq.pdf
+            - listitem [ref=e698]:
+              - link "Accessibility" [ref=e699] [cursor=pointer]:
+                - /url: https://www.servicenow.com/accessibility-statement.html
+            - listitem
+            - listitem [ref=e700]: ©️ 2026 ServiceNow. All rights reserved.
+  - text: ⋮ 

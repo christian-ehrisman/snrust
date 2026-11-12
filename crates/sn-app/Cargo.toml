@@ -27,3 +27,9 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 url.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+# Headless UI tests. Only the core crate's test feature is enabled: the kit, base and
+# component `test-support` features pull a second, conflicting layout-engine version into
+# the lockfile.
+gpui = { package = "gpui-pre", version = "=0.3.12", features = ["test-support"] }

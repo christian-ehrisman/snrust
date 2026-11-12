@@ -1,0 +1,32 @@
+[     270ms] [LOG] Going to iterate over instancesSettings @ https://assets.adobedtm.com/a441b904b50e/a1b7254b4e1d/launch-89f6ee0b3587.min.js:14
+[     837ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://www.servicenow.com/docs/internal/api/webapp/pretty-url/reader:1
+[     839ms] [ERROR] 2026-11-11T14:28:23.263-05:00 SEVERE - net.antidot.fluidtopics.client.shared.book.official.OfficialBookService - Unable to resolve pretty url zurich/platform-security/authentication/oauth-inbound-d31197e36234.html :  @ https://s2.go-mpulse.net/boomerang/RL5JW-PHDQ7-UYYZD-J2FGS-FE4LN:10
+[     916ms] [INFO] Autofocus processing was blocked because a document already has a focused element. @ https://www.servicenow.com/docs/r/zurich/platform-security/authentication/oauth-inbound-d31197e36234.html:1
+[     948ms] an: Promise has been canceled
+    at https://www.servicenow.com/docs/scripts/converters-BrhOEMPm.cache.js:103:1132
+[     949ms] an: Promise has been canceled
+    at https://www.servicenow.com/docs/scripts/converters-BrhOEMPm.cache.js:103:1132
+[     958ms] [ERROR] [NAAS shared nav custom component] TypeError: java.lang.NullPointerException
+    at R_g.U_g [as Rj] (fluidtopicsclient-0.js:7263:10220)
+    at R_g.Af [as Wj] (fluidtopicsclient-0.js:7258:6208)
+    at R_g.sf (fluidtopicsclient-0.js:3539:38)
+    at R_g.Df (fluidtopicsclient-0.js:1702:18)
+    at R_g.Ff (fluidtopicsclient-0.js:1703:18)
+    at new R_g (fluidtopicsclient-0.js:1718:19)
+    at ksh (fluidtopicsclient-0.js:4586:39)
+    at Vro (fluidtopicsclient-0.js:5549:50)
+    at Wro.cso [as fy] (fluidtopicsclient-0.js:7268:28377)
+    at Object.setUiLocale (fluidtopicsclient-0.js:6894:173) @ https://s2.go-mpulse.net/boomerang/RL5JW-PHDQ7-UYYZD-J2FGS-FE4LN:10
+[     959ms] [ERROR] Custom component script error JSHandle@node TypeError: Cannot read properties of undefined (reading 'displayName')
+    at window.CustomComponentsScript.f9ecf597-903c-497c-b803-89abbfc7e867-8bb5b61d-8464-4631-97da-d99bbce5c27e (https://www.servicenow.com/docs/internal/api/webapp/designer/custom/SHARED/f9ecf597-903c-497c-b803-89abbfc7e867/8bb5b61d-8464-4631-97da-d99bbce5c27e/HEADER/js?draft=false&v=ce4cc09936c85fdcd2f8ee50e4ce44c7:11:62)
+    at H.runUserScript (https://www.servicenow.com/docs/scripts/FtHomepageCustomComponent-CwTANqKv.cache.js:6:3433)
+    at H.runScript (https://www.servicenow.com/docs/scripts/FtHomepageCustomComponent-CwTANqKv.cache.js:6:2015)
+    at H.updateScript (https://www.servicenow.com/docs/scripts/FtHomepageCustomComponent-CwTANqKv.cache.js:6:1889) @ https://s2.go-mpulse.net/boomerang/RL5JW-PHDQ7-UYYZD-J2FGS-FE4LN:10
+[     960ms] [ERROR] Custom component script error JSHandle@node TypeError: Cannot read properties of undefined (reading 'displayName')
+    at window.CustomComponentsScript.f9ecf597-903c-497c-b803-89abbfc7e867-8bb5b61d-8464-4631-97da-d99bbce5c27e (https://www.servicenow.com/docs/internal/api/webapp/designer/custom/SHARED/f9ecf597-903c-497c-b803-89abbfc7e867/8bb5b61d-8464-4631-97da-d99bbce5c27e/HEADER/js?draft=false&v=ce4cc09936c85fdcd2f8ee50e4ce44c7:11:62)
+    at H.runUserScript (https://www.servicenow.com/docs/scripts/FtHomepageCustomComponent-CwTANqKv.cache.js:6:3433)
+    at H.runScript (https://www.servicenow.com/docs/scripts/FtHomepageCustomComponent-CwTANqKv.cache.js:6:2015)
+    at H.updateScript (https://www.servicenow.com/docs/scripts/FtHomepageCustomComponent-CwTANqKv.cache.js:6:1889) @ https://s2.go-mpulse.net/boomerang/RL5JW-PHDQ7-UYYZD-J2FGS-FE4LN:10
+[    1025ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://ssosignon.servicenow.com/api/v1/sessions/me:1
+[    1067ms] [LOG] attributes[isAuthenticated]: false @ https://www.servicenow.com/docs/internal/api/webapp/designer/custom/SHARED/213ff6ec-84c7-48a3-9108-7d1241ea893a/4319dc78-c7d1-40cf-bbe3-0330ad55cdc6/HEADER/js?draft=false&v=ce4cc09936c85fdcd2f8ee50e4ce44c7:35
+[    1067ms] [LOG] attributes[roles]: [PRINT_USER, RATING_USER, FEEDBACK_USER, GENERATIVE_AI_USER, GENERATIVE_AI_EXPORT_USER] @ https://www.servicenow.com/docs/internal/api/webapp/designer/custom/SHARED/213ff6ec-84c7-48a3-9108-7d1241ea893a/4319dc78-c7d1-40cf-bbe3-0330ad55cdc6/HEADER/js?draft=false&v=ce4cc09936c85fdcd2f8ee50e4ce44c7:35

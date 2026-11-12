@@ -5,9 +5,9 @@ use std::cell::Cell;
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::notification::Notification;
-use gpui_kit::component::theme::{ActiveTheme as _, ThemeMode};
+use gpui_kit::component::theme::ActiveTheme as _;
 use gpui_kit::component::{
     Icon, Sizable as _, StyledExt as _, TitleBar, WindowExt as _, h_flex, h_resizable,
     resizable_panel, v_flex,
@@ -15,17 +15,25 @@ use gpui_kit::component::{
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use sn_api::SnClient;
-use sn_cache::{CacheStats, FavoriteItem, FavoriteKind, RecentItem};
+use sn_cache::{CacheStats, FavoriteItem, RecentItem};
 use sn_core::{InstanceProfile, SnRecord, TableDescriptor};
 use sn_realtime::{RealtimeEvent, RealtimeTransportMode};
 
 use crate::actions::*;
 use crate::command_palette::CommandPaletteView;
 use crate::connect_modal::ConnectModalView;
+use crate::favorites::{self, NAVIGATION_KEY};
 use crate::form_view::FormViewPanel;
 use crate::list_view::ListViewPanel;
+use crate::preferences::PreferencesView;
+use crate::prefs::{AppPrefs, Appearance};
 use crate::state::{AppServices, WorkspaceCommand};
-use crate::theme::{apply_snrust_theme, parse_hex_color};
+use crate::theme::{apply_snrust_theme, parse_hex_color, sp, spx};
+
+#[path = "sidebar.rs"]
+mod sidebar;
+pub use sidebar::prompt_for_name;
+use sidebar::{NAV_EXPANSION_KEY, NavExpansion};
 
 #[derive(Clone)]
 pub enum WorkspaceTab {
@@ -85,6 +93,9 @@ pub struct WorkspaceShell {
     sidebar_open: bool,
     sidebar_filter_input: Entity<InputState>,
     sidebar_tables: Vec<TableDescriptor>,
+    navigation: sn_core::NavigationSnapshot,
+    show_table_catalog: bool,
+    nav_expansion: NavExpansion,
     favorites: Vec<FavoriteItem>,
     recents: Vec<RecentItem>,
     cache_stats: CacheStats,
@@ -95,6 +106,8 @@ pub struct WorkspaceShell {
     split_tabs: Vec<WorkspaceTab>,
     active_split_ix: usize,
     focused_pane: PaneSlot,
+    /// Detects tab switches so keyboard focus can be recovered; see `render`.
+    last_active_tab_id: Option<String>,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -107,8 +120,9 @@ impl WorkspaceShell {
         cx: &mut Context<Self>,
     ) -> Self {
         let focus_handle = cx.focus_handle();
-        let sidebar_filter_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Filter tables…"));
+        let sidebar_filter_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("Search applications and favorites…")
+        });
 
         let mut subs = Vec::new();
         subs.push(cx.subscribe_in(
@@ -127,6 +141,13 @@ impl WorkspaceShell {
                 .realtime
                 .set_app_focused(window.is_window_active());
             cx.notify();
+        }));
+
+        subs.push(cx.observe_window_appearance(window, |_, _, cx| {
+            if AppPrefs::get(cx).appearance == Appearance::System {
+                apply_snrust_theme(cx);
+                cx.refresh_windows();
+            }
         }));
 
         let rt_rx = services.realtime.subscribe_events();
@@ -180,6 +201,9 @@ impl WorkspaceShell {
             sidebar_open: true,
             sidebar_filter_input,
             sidebar_tables: Vec::new(),
+            navigation: sn_core::NavigationSnapshot::default(),
+            show_table_catalog: false,
+            nav_expansion: NavExpansion::default(),
             favorites: Vec::new(),
             recents: Vec::new(),
             cache_stats: CacheStats::default(),
@@ -189,6 +213,7 @@ impl WorkspaceShell {
             split_tabs: Vec::new(),
             active_split_ix: 0,
             focused_pane: PaneSlot::Primary,
+            last_active_tab_id: None,
             _subscriptions: subs,
         };
 
@@ -223,15 +248,42 @@ impl WorkspaceShell {
         self.transport_mode = mode;
         self.transport_latency_ms = lat;
 
+        self.nav_expansion = match self
+            .services
+            .cache
+            .get_account_metadata(&profile.id, NAV_EXPANSION_KEY)
+        {
+            Ok(saved) => saved.unwrap_or_default(),
+            Err(err) => {
+                tracing::warn!(%err, "Cannot read navigator expansion");
+                NavExpansion::default()
+            }
+        };
         self.refresh_sidebar_lists(cx);
 
-        // Warm table catalog in background, then refresh sidebar tables!
+        self.sync_navigation(window, cx);
+
+        // Refresh catalogs on connect so earlier partial catalogs cannot hide parent fields.
         let services = self.services.clone();
         let client_bg = client.clone();
         let (done_tx, done_rx) = async_channel::bounded(1);
         let handle = services.tokio_handle.clone();
         handle.spawn(async move {
-            let _ = services.ensure_table_hierarchy(&client_bg).await;
+            match client_bg.fetch_table_catalog().await {
+                Ok(tables) => {
+                    if let Err(err) = services
+                        .cache
+                        .save_table_catalog(&client_bg.profile().id, &tables)
+                    {
+                        services.send_cmd(WorkspaceCommand::ToastError(format!(
+                            "Cannot cache table catalog: {err}"
+                        )));
+                    }
+                }
+                Err(err) => services.send_cmd(WorkspaceCommand::ToastError(format!(
+                    "Cannot sync table catalog: {err}"
+                ))),
+            }
             let _ = done_tx.send(()).await;
         });
 
@@ -263,10 +315,12 @@ impl WorkspaceShell {
             self.favorites.clear();
             self.recents.clear();
             self.cache_stats = CacheStats::default();
+            self.navigation = sn_core::NavigationSnapshot::default();
             return;
         };
 
         let filter = self.sidebar_filter_input.read(cx).value().to_string();
+        self.navigation = favorites::load_navigation(&self.services, &profile.id);
         self.sidebar_tables = self
             .services
             .cache
@@ -287,6 +341,121 @@ impl WorkspaceShell {
             .cache
             .cache_stats(Some(&profile.id))
             .unwrap_or_default();
+    }
+
+    /// Reloads the sidebar and then the star buttons of open tabs, which show whether
+    /// their list or record is among the favorites just reloaded.
+    fn refresh_sidebar_and_stars(&mut self, cx: &mut Context<Self>) {
+        self.refresh_sidebar_lists(cx);
+        for tab in self.primary_tabs.iter().chain(self.split_tabs.iter()) {
+            match tab {
+                WorkspaceTab::List { entity, .. } => {
+                    entity.update(cx, |list, cx| list.refresh_favorite_state(cx));
+                }
+                WorkspaceTab::Form { entity, .. } => {
+                    entity.update(cx, |form, cx| form.refresh_favorite_state(cx));
+                }
+            }
+        }
+    }
+
+    fn sync_navigation(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(client) = self.active_client.clone() else {
+            return;
+        };
+        let services = self.services.clone();
+        let id = client.profile().id.clone();
+        let (tx, rx) = async_channel::bounded(1);
+        self.services.tokio_handle.spawn(async move {
+            let mut snapshot = favorites::load_navigation(&services, &id);
+            let (apps, favorites) = tokio::join!(
+                client.fetch_application_menu(),
+                client.fetch_user_favorites()
+            );
+            for (name, error) in [
+                (
+                    "application menu",
+                    match apps {
+                        Ok(apps) => {
+                            snapshot.applications = apps;
+                            None
+                        }
+                        Err(err) => Some(err),
+                    },
+                ),
+                (
+                    "ServiceNow favorites",
+                    match favorites {
+                        Ok(favs) => {
+                            snapshot.favorites = favs;
+                            None
+                        }
+                        Err(err) => Some(err),
+                    },
+                ),
+            ] {
+                if let Some(err) = error {
+                    tracing::warn!(%err, name, "Navigation sync failed; retaining cached entries");
+                    services.send_cmd(WorkspaceCommand::ToastError(format!(
+                        "Cannot sync {name}: {err}. Cached entries and Tables remain available."
+                    )));
+                }
+            }
+            if let Err(err) = services
+                .cache
+                .save_account_metadata(&id, NAVIGATION_KEY, &snapshot)
+            {
+                services.send_cmd(WorkspaceCommand::ToastError(format!(
+                    "Cannot cache navigation: {err}"
+                )));
+            }
+            let _ = tx.send(id).await;
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            if let Ok(id) = rx.recv().await {
+                let _ = this.update(cx, |shell, cx| {
+                    if shell.active_profile.as_ref().is_some_and(|p| p.id == id) {
+                        shell.refresh_sidebar_and_stars(cx);
+                        cx.notify();
+                    }
+                });
+            }
+        })
+        .detach();
+    }
+
+    fn open_target(
+        &mut self,
+        target: sn_core::ClassicTarget,
+        split: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match target {
+            sn_core::ClassicTarget::List { table, query, view } => {
+                self.open_list_view(table, None, query, view, split, window, cx)
+            }
+            sn_core::ClassicTarget::Form {
+                table,
+                sys_id,
+                query,
+                view,
+            } if sys_id == "-1" => self.open_new_record_view(table, view, query, split, window, cx),
+            sn_core::ClassicTarget::Form {
+                table,
+                sys_id,
+                view,
+                ..
+            } => self.open_record_view(
+                table,
+                sys_id,
+                None,
+                view,
+                split || self.split_enabled,
+                window,
+                cx,
+            ),
+        }
     }
 
     fn handle_realtime_event(
@@ -330,6 +499,9 @@ impl WorkspaceShell {
         cx: &mut Context<Self>,
     ) {
         match cmd {
+            WorkspaceCommand::OpenTarget { target, in_split } => {
+                self.open_target(target, in_split, window, cx)
+            }
             WorkspaceCommand::OpenList {
                 table,
                 label,
@@ -372,9 +544,13 @@ impl WorkspaceShell {
                 self.open_instance_dialog(window, cx);
             }
             WorkspaceCommand::RecordSaved {
+                instance_id,
                 record,
                 close_after,
             } => {
+                if self.active_profile.as_ref().map(|profile| &profile.id) != Some(&instance_id) {
+                    return;
+                }
                 // Propagate freshly saved record to any open list views for instant table reflection!
                 if let Some(inst_id) = self.active_profile.as_ref().map(|p| p.id.clone()) {
                     let synth = RealtimeEvent::ListDelta {
@@ -405,9 +581,10 @@ impl WorkspaceShell {
                 window.push_notification(Notification::error(msg), cx);
             }
             WorkspaceCommand::RefreshSidebar => {
-                self.refresh_sidebar_lists(cx);
+                self.refresh_sidebar_and_stars(cx);
                 cx.notify();
             }
+            WorkspaceCommand::SyncNavigation => self.sync_navigation(window, cx),
         }
     }
 
@@ -420,12 +597,34 @@ impl WorkspaceShell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.open_list_view(
+            table,
+            label,
+            encoded_query,
+            String::new(),
+            in_split,
+            window,
+            cx,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn open_list_view(
+        &mut self,
+        table: String,
+        label: Option<String>,
+        encoded_query: String,
+        view: String,
+        in_split: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(client) = self.active_client.clone() else {
             self.open_instance_dialog(window, cx);
             return;
         };
 
-        let tab_id = format!("list:{table}:{encoded_query}");
+        let tab_id = format!("list:{table}:{view}:{encoded_query}");
         if in_split {
             self.split_enabled = true;
             if let Some(pos) = self.split_tabs.iter().position(|t| t.id() == tab_id) {
@@ -451,6 +650,7 @@ impl WorkspaceShell {
                 table,
                 label,
                 encoded_query,
+                view,
                 window,
                 cx,
             )
@@ -484,12 +684,34 @@ impl WorkspaceShell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.open_record_view(
+            table,
+            sys_id,
+            seed_record,
+            String::new(),
+            in_split,
+            window,
+            cx,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn open_record_view(
+        &mut self,
+        table: String,
+        sys_id: String,
+        seed_record: Option<SnRecord>,
+        view: String,
+        in_split: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(client) = self.active_client.clone() else {
             self.open_instance_dialog(window, cx);
             return;
         };
 
-        let tab_id = format!("form:{table}:{sys_id}");
+        let tab_id = format!("form:{table}:{sys_id}:{view}");
         if let Some(pos) = self.primary_tabs.iter().position(|t| t.id() == tab_id) {
             self.active_primary_ix = pos;
             self.focused_pane = PaneSlot::Primary;
@@ -512,6 +734,7 @@ impl WorkspaceShell {
                 table.clone(),
                 sys_id.clone(),
                 seed_record.clone(),
+                view,
                 window,
                 cx,
             )
@@ -546,6 +769,19 @@ impl WorkspaceShell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.open_new_record_view(table, String::new(), String::new(), in_split, window, cx);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn open_new_record_view(
+        &mut self,
+        table: String,
+        view: String,
+        query: String,
+        in_split: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(client) = self.active_client.clone() else {
             self.open_instance_dialog(window, cx);
             return;
@@ -553,7 +789,8 @@ impl WorkspaceShell {
 
         let tab_id = format!("new:{table}:{}", uuid::Uuid::new_v4());
         let services = self.services.clone();
-        let entity = cx.new(|cx| FormViewPanel::open_new(services, client, table, window, cx));
+        let entity =
+            cx.new(|cx| FormViewPanel::open_new(services, client, table, view, query, window, cx));
         let tab = WorkspaceTab::Form { id: tab_id, entity };
 
         if in_split {
@@ -611,31 +848,76 @@ impl WorkspaceShell {
 
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(res) = rx.recv().await {
-                let _ = this.update_in(cx, |shell, window, cx| match res {
-                    Ok(Some(rec)) => {
-                        let _ = shell.services.cache.upsert_record(&inst_id, &rec);
-                        shell.open_record_tab(
-                            table,
-                            rec.sys_id.clone(),
-                            Some(rec),
-                            shell.split_enabled,
-                            window,
-                            cx,
-                        );
+                let _ = this.update_in(cx, |shell, window, cx| {
+                    if shell.active_profile.as_ref().map(|profile| &profile.id) != Some(&inst_id) {
+                        return;
                     }
-                    Ok(None) => {
-                        window.push_notification(
-                            Notification::warning(format!("No {table} record found for {number}")),
-                            cx,
-                        );
-                    }
-                    Err(e) => {
-                        window.push_notification(Notification::error(e.to_string()), cx);
+                    match res {
+                        Ok(Some(rec)) => {
+                            let _ = shell.services.cache.upsert_record(&inst_id, &rec);
+                            shell.open_record_tab(
+                                table,
+                                rec.sys_id.clone(),
+                                Some(rec),
+                                shell.split_enabled,
+                                window,
+                                cx,
+                            );
+                        }
+                        Ok(None) => {
+                            window.push_notification(
+                                Notification::warning(format!(
+                                    "No {table} record found for {number}"
+                                )),
+                                cx,
+                            );
+                        }
+                        Err(e) => {
+                            window.push_notification(Notification::error(e.to_string()), cx);
+                        }
                     }
                 });
             }
         })
         .detach();
+    }
+
+    /// Tab ids of the primary and split panes, in display order.
+    #[cfg(test)]
+    pub fn tab_ids(&self) -> (Vec<String>, Vec<String>) {
+        let ids = |tabs: &[WorkspaceTab]| tabs.iter().map(|tab| tab.id().to_string()).collect();
+        (ids(&self.primary_tabs), ids(&self.split_tabs))
+    }
+
+    #[cfg(test)]
+    pub fn split_is_open(&self) -> bool {
+        self.split_enabled
+    }
+
+    #[cfg(test)]
+    pub fn navigation(&self) -> &sn_core::NavigationSnapshot {
+        &self.navigation
+    }
+
+    #[cfg(test)]
+    pub fn local_favorites(&self) -> &[FavoriteItem] {
+        &self.favorites
+    }
+
+    #[cfg(test)]
+    pub fn active_list(&self) -> Option<Entity<ListViewPanel>> {
+        match self.active_tab()? {
+            WorkspaceTab::List { entity, .. } => Some(entity.clone()),
+            WorkspaceTab::Form { .. } => None,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn active_form(&self) -> Option<Entity<FormViewPanel>> {
+        match self.active_tab()? {
+            WorkspaceTab::Form { entity, .. } => Some(entity.clone()),
+            WorkspaceTab::List { .. } => None,
+        }
     }
 
     fn active_tab(&self) -> Option<&WorkspaceTab> {
@@ -688,13 +970,27 @@ impl WorkspaceShell {
         let services = self.services.clone();
         let active_id = self.active_profile.as_ref().map(|p| p.id.clone());
         let modal_view = cx.new(|cx| ConnectModalView::new(services, active_id, window, cx));
-        window.open_dialog(cx, move |dialog, _, _| {
+        window.open_dialog(cx, move |dialog, _, cx| {
             dialog
-                .w(px(820.0))
+                .w(spx(820.0, cx))
                 .title("ServiceNow Instance Connections")
                 .close_button(true)
                 .overlay_closable(true)
                 .child(modal_view.clone())
+        });
+    }
+
+    pub fn open_preferences_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let services = self.services.clone();
+        let active = self.active_profile.clone();
+        let view = cx.new(|_| PreferencesView::new(services, active));
+        window.open_dialog(cx, move |dialog, _, cx| {
+            dialog
+                .w(spx(760.0, cx))
+                .title("Settings")
+                .close_button(true)
+                .overlay_closable(true)
+                .child(view.clone())
         });
     }
 
@@ -709,7 +1005,7 @@ impl WorkspaceShell {
                 fh.focus(window, cx);
             }
             dialog
-                .w(px(620.0))
+                .w(spx(620.0, cx))
                 .margin_top(px(72.0))
                 .title("Quick Jump & Commands")
                 .close_button(true)
@@ -723,7 +1019,7 @@ impl WorkspaceShell {
         let inst_label = self
             .active_profile
             .as_ref()
-            .map(|p| p.name.clone())
+            .map(|p| p.display_label())
             .unwrap_or_else(|| "Connect Instance".to_string());
         let inst_dot = self
             .active_profile
@@ -790,7 +1086,7 @@ impl WorkspaceShell {
                                     div()
                                         .text_xs()
                                         .font_medium()
-                                        .max_w(px(180.0))
+                                        .max_w(sp(180.0))
                                         .truncate()
                                         .child(inst_label),
                                 )
@@ -805,7 +1101,7 @@ impl WorkspaceShell {
                 .child(
                     h_flex()
                         .id("titlebar-omnibox-btn")
-                        .w(px(340.0))
+                        .w(sp(340.0))
                         .px_2p5()
                         .py_0p5()
                         .justify_between()
@@ -840,7 +1136,7 @@ impl WorkspaceShell {
                                 .px_1()
                                 .rounded(px(3.0))
                                 .bg(theme.background)
-                                .text_size(px(10.0))
+                                .text_size(sp(10.0))
                                 .text_color(theme.muted_foreground)
                                 .child("⌘K"),
                         ),
@@ -863,7 +1159,7 @@ impl WorkspaceShell {
                                 .child(div().size(px(6.5)).rounded_full().bg(status_color))
                                 .child(
                                     div()
-                                        .text_size(px(11.0))
+                                        .text_size(sp(11.0))
                                         .font_medium()
                                         .text_color(status_color)
                                         .child(status_text),
@@ -888,318 +1184,11 @@ impl WorkspaceShell {
                                 } else {
                                     IconName::Moon
                                 })
-                                .on_click(|_, _, cx| {
-                                    let next = if cx.theme().mode.is_dark() {
-                                        ThemeMode::Light
-                                    } else {
-                                        ThemeMode::Dark
-                                    };
-                                    apply_snrust_theme(next, cx);
-                                }),
+                                .tooltip("Switch between light and dark")
+                                .on_click(|_, _, cx| toggle_light_dark(cx)),
                         ),
                 ),
         )
-    }
-
-    fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme().clone();
-        let kb_size = (self.cache_stats.db_bytes / 1024).max(1);
-
-        v_flex()
-            .size_full()
-            .bg(theme.sidebar)
-            .border_r_1()
-            .border_color(theme.sidebar_border)
-            .justify_between()
-            .child(
-                v_flex()
-                    .flex_1()
-                    .overflow_hidden()
-                    .p_2p5()
-                    .gap_2p5()
-                    .child(
-                        Input::new(&self.sidebar_filter_input)
-                            .small()
-                            .prefix(
-                                Icon::new(IconName::Search)
-                                    .xsmall()
-                                    .text_color(theme.muted_foreground),
-                            )
-                            .cleanable(true),
-                    )
-                    .child(
-                        v_flex()
-                            .id("sidebar-scroll-body")
-                            .flex_1()
-                            .overflow_y_scroll()
-                            .gap_3()
-                            // Pinned Favorites
-                            .when(!self.favorites.is_empty(), |el| {
-                                el.child(
-                                    v_flex()
-                                        .gap_0p5()
-                                        .child(sidebar_section_header("FAVORITES", &theme))
-                                        .children(
-                                            self.favorites.iter().cloned().enumerate().map(
-                                                |(ix, fav)| {
-                                                    let fav_click = fav.clone();
-                                                    h_flex()
-                                                        .id(("fav-item", ix))
-                                                        .px_2()
-                                                        .py_1()
-                                                        .gap_2()
-                                                        .items_center()
-                                                        .rounded(theme.radius)
-                                                        .cursor_pointer()
-                                                        .hover(|s| s.bg(theme.accent))
-                                                        .on_click(cx.listener(
-                                                            move |this, evt: &ClickEvent, window, cx| {
-                                                                let split = evt.modifiers().platform;
-                                                                match &fav_click.kind {
-                                                                    FavoriteKind::Table {
-                                                                        table,
-                                                                        label,
-                                                                        query,
-                                                                    } => {
-                                                                        this.open_list_tab(
-                                                                            table.clone(),
-                                                                            Some(label.clone()),
-                                                                            query.clone(),
-                                                                            split,
-                                                                            window,
-                                                                            cx,
-                                                                        );
-                                                                    }
-                                                                    FavoriteKind::Record {
-                                                                        table,
-                                                                        sys_id,
-                                                                        ..
-                                                                    } => {
-                                                                        this.open_record_tab(
-                                                                            table.clone(),
-                                                                            sys_id.clone(),
-                                                                            None,
-                                                                            split || this.split_enabled,
-                                                                            window,
-                                                                            cx,
-                                                                        );
-                                                                    }
-                                                                }
-                                                            },
-                                                        ))
-                                                        .child(
-                                                            Icon::new(IconName::Star)
-                                                                .xsmall()
-                                                                .text_color(rgb(0xFBBF24)),
-                                                        )
-                                                        .child(
-                                                            div()
-                                                                .text_xs()
-                                                                .truncate()
-                                                                .child(fav.title),
-                                                        )
-                                                },
-                                            ),
-                                        ),
-                                )
-                            })
-                            // Tables Catalog
-                            .child(
-                                v_flex()
-                                    .gap_0p5()
-                                    .child(sidebar_section_header("TABLES", &theme))
-                                    .children(
-                                        self.sidebar_tables.iter().cloned().enumerate().map(
-                                            |(ix, tbl)| {
-                                                let t_name = tbl.name.clone();
-                                                let t_lbl = tbl.label.clone();
-                                                let t_new = tbl.name.clone();
-                                                h_flex()
-                                                    .id(("sidebar-tbl", ix))
-                                                    .px_2()
-                                                    .py_1()
-                                                    .justify_between()
-                                                    .items_center()
-                                                    .rounded(theme.radius)
-                                                    .cursor_pointer()
-                                                    .hover(|s| s.bg(theme.accent))
-                                                    .on_click(cx.listener(
-                                                        move |this, evt: &ClickEvent, window, cx| {
-                                                            this.open_list_tab(
-                                                                t_name.clone(),
-                                                                Some(t_lbl.clone()),
-                                                                String::new(),
-                                                                evt.modifiers().platform,
-                                                                window,
-                                                                cx,
-                                                            );
-                                                        },
-                                                    ))
-                                                    .child(
-                                                        v_flex()
-                                                            .overflow_hidden()
-                                                            .child(
-                                                                div()
-                                                                    .text_xs()
-                                                                    .font_medium()
-                                                                    .truncate()
-                                                                    .child(tbl.label),
-                                                            )
-                                                            .child(
-                                                                div()
-                                                                    .text_size(px(10.5))
-                                                                    .font_family(
-                                                                        theme
-                                                                            .mono_font_family
-                                                                            .clone(),
-                                                                    )
-                                                                    .text_color(
-                                                                        theme.muted_foreground,
-                                                                    )
-                                                                    .truncate()
-                                                                    .child(tbl.name),
-                                                            ),
-                                                    )
-                                                    .child(
-                                                        Button::new(("new-rec-side", ix))
-                                                            .ghost()
-                                                            .xsmall()
-                                                            .icon(IconName::Plus)
-                                                            .on_click(cx.listener(
-                                                                move |this, _, window, cx| {
-                                                                    cx.stop_propagation();
-                                                                    this.open_new_record_tab(
-                                                                        t_new.clone(),
-                                                                        this.split_enabled,
-                                                                        window,
-                                                                        cx,
-                                                                    );
-                                                                },
-                                                            )),
-                                                    )
-                                            },
-                                        ),
-                                    ),
-                            )
-                            // Recent Records
-                            .when(!self.recents.is_empty(), |el| {
-                                el.child(
-                                    v_flex()
-                                        .gap_0p5()
-                                        .child(sidebar_section_header("RECENT", &theme))
-                                        .children(
-                                            self.recents
-                                                .iter()
-                                                .filter(|r| r.sys_id.is_some())
-                                                .take(8)
-                                                .cloned()
-                                                .enumerate()
-                                                .map(|(ix, rec)| {
-                                                    let tbl = rec.table.clone();
-                                                    let sid = rec.sys_id.clone().unwrap_or_default();
-                                                    h_flex()
-                                                        .id(("recent-rec", ix))
-                                                        .px_2()
-                                                        .py_1()
-                                                        .gap_2()
-                                                        .items_center()
-                                                        .rounded(theme.radius)
-                                                        .cursor_pointer()
-                                                        .hover(|s| s.bg(theme.accent))
-                                                        .on_click(cx.listener(
-                                                            move |this, evt: &ClickEvent, window, cx| {
-                                                                this.open_record_tab(
-                                                                    tbl.clone(),
-                                                                    sid.clone(),
-                                                                    None,
-                                                                    evt.modifiers().platform
-                                                                        || this.split_enabled,
-                                                                    window,
-                                                                    cx,
-                                                                );
-                                                            },
-                                                        ))
-                                                        .child(
-                                                            Icon::new(IconName::Clock)
-                                                                .xsmall()
-                                                                .text_color(theme.muted_foreground),
-                                                        )
-                                                        .child(
-                                                            v_flex()
-                                                                .overflow_hidden()
-                                                                .child(
-                                                                    div()
-                                                                        .text_xs()
-                                                                        .font_family(
-                                                                            theme
-                                                                                .mono_font_family
-                                                                                .clone(),
-                                                                        )
-                                                                        .truncate()
-                                                                        .child(rec.title),
-                                                                )
-                                                                .when_some(
-                                                                    rec.subtitle,
-                                                                    |el, sub| {
-                                                                        el.child(
-                                                                            div()
-                                                                                .text_size(px(10.5))
-                                                                                .text_color(
-                                                                                    theme
-                                                                                        .muted_foreground,
-                                                                                )
-                                                                                .truncate()
-                                                                                .child(sub),
-                                                                        )
-                                                                    },
-                                                                ),
-                                                        )
-                                                }),
-                                        ),
-                                )
-                            }),
-                    ),
-            )
-            // Cache Telemetry Footer
-            .child(
-                h_flex()
-                    .px_3()
-                    .py_2()
-                    .border_t_1()
-                    .border_color(theme.sidebar_border)
-                    .justify_between()
-                    .items_center()
-                    .child(
-                        div()
-                            .text_size(px(10.5))
-                            .text_color(theme.muted_foreground)
-                            .child(format!(
-                                "Cache: {} rows · {} KB",
-                                self.cache_stats.record_count, kb_size
-                            )),
-                    )
-                    .when(self.active_profile.is_some(), |el| {
-                        el.child(
-                            Button::new("purge-cache-btn")
-                                .ghost()
-                                .xsmall()
-                                .icon(IconName::RotateCw)
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    if let Some(p) = &this.active_profile {
-                                        let _ = this.services.cache.clear_instance_cache(&p.id);
-                                        this.refresh_sidebar_lists(cx);
-                                        window.push_notification(
-                                            Notification::info(
-                                                "Cleared cached records & schemas (custom layouts preserved)",
-                                            ),
-                                            cx,
-                                        );
-                                        cx.notify();
-                                    }
-                                })),
-                        )
-                    }),
-            )
     }
 
     fn render_pane(
@@ -1238,7 +1227,7 @@ impl WorkspaceShell {
             .child(
                 h_flex()
                     .w_full()
-                    .h(px(34.0))
+                    .h(sp(34.0))
                     .px_2()
                     .gap_1()
                     .items_center()
@@ -1272,7 +1261,7 @@ impl WorkspaceShell {
                                         },
                                         ix,
                                     ))
-                                    .h(px(26.0))
+                                    .h(sp(26.0))
                                     .px_2p5()
                                     .gap_1p5()
                                     .items_center()
@@ -1311,7 +1300,7 @@ impl WorkspaceShell {
                                             } else {
                                                 FontWeight::NORMAL
                                             })
-                                            .max_w(px(170.0))
+                                            .max_w(sp(170.0))
                                             .truncate()
                                             .child(title),
                                     )
@@ -1383,7 +1372,7 @@ impl WorkspaceShell {
             .gap_4()
             .child(
                 v_flex()
-                    .max_w(px(460.0))
+                    .max_w(sp(460.0))
                     .p_6()
                     .gap_4()
                     .rounded(theme.radius_lg)
@@ -1464,8 +1453,23 @@ impl Focusable for WorkspaceShell {
 }
 
 impl Render for WorkspaceShell {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme().clone();
+
+        // Opening, closing or switching a tab can take the focused view off screen (for
+        // example the list whose link was just clicked). Shortcuts are delivered along the
+        // focus path, so with focus stranded there ⌘W, ⌘S and the rest would stop working
+        // until the next click. Deferred so the check sees the frame being rendered now.
+        let active_tab_id = self.active_tab().map(|tab| tab.id().to_string());
+        if active_tab_id != self.last_active_tab_id {
+            self.last_active_tab_id = active_tab_id;
+            cx.defer_in(window, |this, window, cx| {
+                if !window.has_active_dialog(cx) && !this.focus_handle.contains_focused(window, cx)
+                {
+                    this.focus_handle.focus(window, cx);
+                }
+            });
+        }
         let primary_pane = self.render_pane(
             PaneSlot::Primary,
             &self.primary_tabs,
@@ -1487,6 +1491,9 @@ impl Render for WorkspaceShell {
             }))
             .on_action(cx.listener(|this, _: &OpenInstanceManager, window, cx| {
                 this.open_instance_dialog(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &OpenPreferences, window, cx| {
+                this.open_preferences_dialog(window, cx);
             }))
             .on_action(cx.listener(|this, _: &SaveActiveForm, window, cx| {
                 if let Some(WorkspaceTab::Form { entity, .. }) = this.active_tab().cloned() {
@@ -1524,13 +1531,11 @@ impl Render for WorkspaceShell {
                 this.split_enabled = !this.split_enabled;
                 cx.notify();
             }))
-            .on_action(|_: &ToggleThemeMode, _, cx| {
-                let next = if cx.theme().mode.is_dark() {
-                    ThemeMode::Light
-                } else {
-                    ThemeMode::Dark
-                };
-                apply_snrust_theme(next, cx);
+            .on_action(|_: &ToggleThemeMode, _, cx| toggle_light_dark(cx))
+            .on_action(|_: &IncreaseUiScale, _, cx| AppPrefs::step_ui_scale(cx, 1))
+            .on_action(|_: &DecreaseUiScale, _, cx| AppPrefs::step_ui_scale(cx, -1))
+            .on_action(|_: &ResetUiScale, _, cx| {
+                AppPrefs::update(cx, |prefs| prefs.ui_scale = 1.0);
             })
             .on_action(cx.listener(|this, _: &CloseActiveTab, _, cx| {
                 this.close_active_tab(cx);
@@ -1553,7 +1558,7 @@ impl Render for WorkspaceShell {
                     h_resizable("main-shell-resizable")
                         .child(
                             resizable_panel()
-                                .size(px(236.0))
+                                .size(spx(236.0, cx))
                                 .size_range(px(180.0)..px(380.0))
                                 .visible(self.sidebar_open)
                                 .child(self.render_sidebar(cx)),
@@ -1566,7 +1571,7 @@ impl Render for WorkspaceShell {
                         .when_some(split_pane, |grp, sp| {
                             grp.child(
                                 resizable_panel()
-                                    .size(px(580.0))
+                                    .size(spx(580.0, cx))
                                     .size_range(px(360.0)..px(2400.0))
                                     .child(sp),
                             )
@@ -1576,15 +1581,12 @@ impl Render for WorkspaceShell {
     }
 }
 
-fn sidebar_section_header(
-    label: &'static str,
-    theme: &gpui_kit::component::theme::Theme,
-) -> impl IntoElement {
-    div()
-        .px_2()
-        .py_1()
-        .text_size(px(10.0))
-        .font_semibold()
-        .text_color(theme.muted_foreground)
-        .child(label)
+/// Flips to the opposite of what is on screen, which also leaves "Match system" mode.
+fn toggle_light_dark(cx: &mut App) {
+    let next = if cx.theme().mode.is_dark() {
+        Appearance::Light
+    } else {
+        Appearance::Dark
+    };
+    AppPrefs::update(cx, |prefs| prefs.appearance = next);
 }
